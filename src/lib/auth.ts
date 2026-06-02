@@ -44,7 +44,12 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
     }
 
     if (!validatePKCEState(state)) {
-        console.error('❌ [Frontend] State validation failed');
+        const savedState = sessionStorage.getItem('pkce_state') || localStorage.getItem('pkce_state');
+        console.error('❌ [Frontend] State validation failed', {
+            incomingState: state,
+            savedState,
+        });
+        clearPKCEVerifier();
         return { success: false, error: 'State mismatch' };
     }
 

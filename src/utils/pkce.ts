@@ -27,24 +27,69 @@ export function createState(): string {
     return generateRandomString(16);
 }
 
+const PKCE_CODE_VERIFIER_KEY = 'pkce_code_verifier';
+const PKCE_STATE_KEY = 'pkce_state';
+
+const setStorageItem = (key: string, value: string) => {
+    try {
+        sessionStorage.setItem(key, value);
+    } catch {
+        // ignore storage failures
+    }
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // ignore storage failures
+    }
+};
+
+const removeStorageItem = (key: string) => {
+    try {
+        sessionStorage.removeItem(key);
+    } catch {
+        // ignore storage failures
+    }
+    try {
+        localStorage.removeItem(key);
+    } catch {
+        // ignore storage failures
+    }
+};
+
+const getStorageItem = (key: string): string | null => {
+    try {
+        const sessionValue = sessionStorage.getItem(key);
+        if (sessionValue) return sessionValue;
+    } catch {
+        // ignore
+    }
+    try {
+        const localValue = localStorage.getItem(key);
+        if (localValue) return localValue;
+    } catch {
+        // ignore
+    }
+    return null;
+};
+
 export const storePKCEState = (verifier: string, state: string) => {
-    sessionStorage.setItem('pkce_code_verifier', verifier);
-    sessionStorage.setItem('pkce_state', state);
+    setStorageItem(PKCE_CODE_VERIFIER_KEY, verifier);
+    setStorageItem(PKCE_STATE_KEY, state);
 };
 
 export const popPKCEVerifier = (): string | null => {
-    const verifier = sessionStorage.getItem('pkce_code_verifier');
-    sessionStorage.removeItem('pkce_code_verifier');
+    const verifier = getStorageItem(PKCE_CODE_VERIFIER_KEY);
+    removeStorageItem(PKCE_CODE_VERIFIER_KEY);
     return verifier;
 };
 
 export const clearPKCEVerifier = () => {
-    sessionStorage.removeItem('pkce_code_verifier');
-    sessionStorage.removeItem('pkce_state');
+    removeStorageItem(PKCE_CODE_VERIFIER_KEY);
+    removeStorageItem(PKCE_STATE_KEY);
 };
 
 export const validatePKCEState = (incomingState: string): boolean => {
-    const savedState = sessionStorage.getItem('pkce_state');
+    const savedState = getStorageItem(PKCE_STATE_KEY);
     return incomingState === savedState;
 };
 
