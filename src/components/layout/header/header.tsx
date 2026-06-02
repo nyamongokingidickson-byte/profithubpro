@@ -168,7 +168,12 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                                 }
                             } catch (error) {
                                 // eslint-disable-next-line no-console
-                                console.error(error);
+                                console.error('Login button failed, falling back to OAuth redirect:', error);
+                                try {
+                                    window.location.replace(await generateOAuthURL());
+                                } catch (redirectError) {
+                                    console.error('Fallback OAuth redirect failed:', redirectError);
+                                }
                             }
                         }}
                     >

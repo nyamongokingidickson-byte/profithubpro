@@ -4,15 +4,31 @@ import { clearPKCEVerifier, popPKCEVerifier, validatePKCEState } from '@/utils/p
 import derivApiService from '@/lib/deriv-api-service';
 
 export async function startLogin(): Promise<void> {
-    const { generateOAuthURL } = await import('@/components/shared/utils/config/config');
-    const url = await generateOAuthURL();
-    window.location.href = url;
+    try {
+        const { generateOAuthURL } = await import('@/components/shared/utils/config/config');
+        const url = await generateOAuthURL();
+        if (!url) {
+            throw new Error('OAuth URL generation returned an empty value');
+        }
+        window.location.href = url;
+    } catch (error) {
+        console.error('Failed to start login:', error);
+        throw error;
+    }
 }
 
 export async function startSignup(): Promise<void> {
-    const { generateOAuthURL } = await import('@/components/shared/utils/config/config');
-    const url = await generateOAuthURL('registration');
-    window.location.href = url;
+    try {
+        const { generateOAuthURL } = await import('@/components/shared/utils/config/config');
+        const url = await generateOAuthURL('registration');
+        if (!url) {
+            throw new Error('OAuth URL generation returned an empty value');
+        }
+        window.location.href = url;
+    } catch (error) {
+        console.error('Failed to start signup:', error);
+        throw error;
+    }
 }
 
 export async function handleCallback(): Promise<{ success: boolean; error?: string }> {
