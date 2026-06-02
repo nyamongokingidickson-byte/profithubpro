@@ -93,7 +93,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             redirect_uri,
             code_verifier: code_verifier.substring(0, 20) + '...',
         });
-        const tokenResponse = await fetch('https://auth.deriv.com/oauth2/token', {
+        const tokenEndpoint = process.env.DERIV_TOKEN_URL || 'https://auth.deriv.com/oauth2/token';
+        const tokenResponse = await fetch(tokenEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',

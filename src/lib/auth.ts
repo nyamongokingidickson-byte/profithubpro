@@ -97,15 +97,13 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
         }
 
         try {
-            console.log('📡 [Frontend] Fetching Deriv accounts using token...', {
-                appId: String(getAppId()),
+            console.log('📡 [Frontend] Fetching Deriv accounts using proxy...', {
                 token_preview: access_token.substring(0, 15) + '...'
             });
-            const accountsResponse = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
+            const accountsResponse = await fetch('/api/accounts', {
                 method: 'GET',
                 headers: {
                     Authorization: `Bearer ${access_token}`,
-                    'Deriv-App-ID': String(getAppId()),
                 },
             });
 

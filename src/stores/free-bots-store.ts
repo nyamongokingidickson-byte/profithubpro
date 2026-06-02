@@ -1,5 +1,5 @@
 import { action, makeObservable, observable, runInAction } from 'mobx';
-import { api_base } from '@/external/bot-skeleton';
+import DerivWS from '@/services/DerivWS';
 import { DigitStatsEngine } from '@/lib/digit-stats-engine';
 import RootStore from './root-store';
 
@@ -131,14 +131,15 @@ export default class FreeBotsStore {
     }
 
     private waitAndConnect = () => {
-        const try_connect = () => {
-            if (api_base.api) {
+        const try_connect = async () => {
+            try {
+                await DerivWS.connect();
                 runInAction(() => {
                     this.is_connected = true;
                 });
                 this.fetchMarkets();
                 this.subscribeToTicks();
-            } else {
+            } catch {
                 setTimeout(try_connect, 1000);
             }
         };
@@ -148,8 +149,8 @@ export default class FreeBotsStore {
     @action
     fetchMarkets = async () => {
         try {
-            if (!api_base.api) return;
-            const res = await api_base.api.send({ active_symbols: 'brief', product_type: 'basic' });
+            if (!DerivWS.isConnected) return;
+            const res = await DerivWS.send({ active_symbols: 'brief', product_type: 'basic' });
             if (res?.active_symbols?.length) {
                 const groups: Record<string, { group: string; items: { value: string; label: string }[] }> = {};
                 res.active_symbols.forEach((s: any) => {
@@ -188,82 +189,52 @@ export default class FreeBotsStore {
         this.subscribeToTicks();
     };
 
-    private active_stream_id: string | null = null;
     @action
     subscribeToTicks = async (retry_count = 0) => {
-        if (!api_base.api || this.is_subscribing) return;
+        if (!DerivWS.isConnected || this.is_subscribing) return;
         if (this.unsubscribe) {
             this.unsubscribe();
             this.unsubscribe = null;
         }
 
-        if (this.active_stream_id && api_base.api) {
-            try {
-                api_base.api.send({ forget: this.active_stream_id });
-            } catch (e) {}
-            this.active_stream_id = null;
-        }
-
         this.is_subscribing = true;
 
         try {
-            let response: any;
-            try {
-                response = await api_base.api.send({
+            const subscriptionId = DerivWS.subscribe(
+                {
                     ticks_history: this.symbol,
                     count: 200,
                     end: 'latest',
                     style: 'ticks',
-                    subscribe: 1,
-                });
-            } catch (err: any) {
-                if (err.error?.code === 'AlreadySubscribed') {
-                    response = await api_base.api.send({
-                        ticks_history: this.symbol,
-                        count: 200,
-                        end: 'latest',
-                        style: 'ticks',
-                    });
-                } else {
-                    throw err;
+                },
+                (msg: any) => {
+                    const data = msg.data || msg;
+
+                    if (data.history || data.ticks_history) {
+                        const hist = data.history || data.ticks_history;
+                        if (hist?.prices?.length) {
+                            runInAction(() => {
+                                const prices = hist.prices.map(Number);
+                                const digits = prices.map((p: number) => this.stats_engine.extractLastDigit(p));
+                                this.ticks = digits.slice(-200);
+                                this.last_15 = digits.slice(-15);
+                                this.last_digit = digits[digits.length - 1] ?? null;
+                                this.current_price = prices[prices.length - 1];
+                                this.stats_engine.update(this.ticks, prices);
+                                this.refreshStats();
+                                this.is_subscribing = false;
+                            });
+                        }
+                        return;
+                    }
+
+                    if (data.msg_type === 'tick' && data.tick && data.tick.symbol === this.symbol) {
+                        this.processTick(data.tick);
+                    }
                 }
-            }
+            );
 
-            if (response.subscription?.id) {
-                this.active_stream_id = response.subscription.id;
-            }
-
-            if (response.error) {
-                throw new Error(response.error.message);
-            }
-
-            // Handle initial history
-            if (response.history || response.ticks_history) {
-                const hist = response.history || response.ticks_history;
-                if (hist?.prices?.length) {
-                    runInAction(() => {
-                        const prices = hist.prices.map(Number);
-                        const digits = prices.map((p: number) => this.stats_engine.extractLastDigit(p));
-                        this.ticks = digits.slice(-200);
-                        this.last_15 = digits.slice(-15);
-                        this.last_digit = digits[digits.length - 1] ?? null;
-                        this.current_price = prices[prices.length - 1];
-                        this.stats_engine.update(this.ticks, prices);
-                        this.refreshStats();
-                        this.is_subscribing = false;
-                    });
-                }
-            }
-
-            // Setup real-time listener
-            const subscription = api_base.api.onMessage().subscribe((msg: any) => {
-                const data = msg.data || msg;
-                if (data.msg_type === 'tick' && data.tick && data.tick.symbol === this.symbol) {
-                    this.processTick(data.tick);
-                }
-            });
-
-            this.unsubscribe = () => subscription.unsubscribe();
+            this.unsubscribe = () => DerivWS.unsubscribe(subscriptionId);
 
             runInAction(() => {
                 this.is_subscribing = false;

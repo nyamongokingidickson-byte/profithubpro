@@ -78,12 +78,13 @@ const config: Config = {
 
     // A map from regular expressions to module names or to arrays of module names that allow to stub out resources with a single module
     moduleNameMapper: {
-        '\\.(css|less|scss)$': '<rootDir>/__mocks__/styleMock.js',
+        '\.(css|less|scss)$': '<rootDir>/__mocks__/styleMock.js',
         '\\.(gif|ttf|eot|svg)$': '<rootDir>/__mocks__/fileMock.js',
         'react-dom/server': '<rootDir>/__mocks__/react-dom-server.js',
         '@deriv-com/translations': '<rootDir>/__mocks__/translation.mock.js',
         '@deriv-com/ui': '<rootDir>/node_modules/@deriv-com/ui',
         '@deriv-com/auth-client': '<rootDir>/node_modules/@deriv-com/auth-client',
+        '^@/(.*)$': ['<rootDir>/src/$1', '<rootDir>/external/cashflowtraders/src/$1'],
         '^@/external/(.*)$': '<rootDir>/src/external/$1',
         '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
         '^@/components/(.*)$': '<rootDir>/src/components/$1',
@@ -94,7 +95,7 @@ const config: Config = {
     },
 
     // An array of regexp pattern strings, matched against all module paths before considered 'visible' to the module loader
-    // modulePathIgnorePatterns: [],
+    modulePathIgnorePatterns: ['<rootDir>/profithubtool.co.ke/__mocks__', '<rootDir>/external/cashflowtraders/__mocks__'],
 
     // Activates notifications for test results
     // notify: false,
@@ -125,6 +126,9 @@ const config: Config = {
 
     // The root directory that Jest should scan for tests and modules within
     rootDir: __dirname,
+
+    // Limit scanning to these roots to avoid duplicate manual mock files in subprojects
+    roots: ['<rootDir>/src', '<rootDir>/external/cashflowtraders', '<rootDir>/__mocks__'],
 
     // A list of paths to directories that Jest should use to search for files in
     // roots: [
@@ -175,7 +179,7 @@ const config: Config = {
     // A map from regular expressions to paths to transformers
     transform: {
         '^.+\\.(js|jsx)$': 'babel-jest',
-        '^.+\\.tsx?$': 'babel-jest',
+        '^.+\\.tsx?$': 'ts-jest',
         '^.+\\.xml$': 'jest-transform-stub',
     },
 
