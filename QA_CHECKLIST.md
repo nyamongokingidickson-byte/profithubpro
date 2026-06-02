@@ -145,7 +145,7 @@ curl -X POST https://extradollarhub.site/api/auth/logout
 ## Environment Isolation
 
 ### Local Development
-- [ ] Can set `REDIRECT_URI=http://localhost:3000` in `.env.local`
+- [ ] Can set `REDIRECT_URI=http://localhost:8443` in `.env.local`
 - [ ] Auth flow works with localhost
 - [ ] Can switch back to production URI
 

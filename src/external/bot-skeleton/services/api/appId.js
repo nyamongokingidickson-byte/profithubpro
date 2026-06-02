@@ -29,6 +29,9 @@ export const V2GetActiveToken = () => {
 };
 
 export const V2GetActiveClientId = () => {
+    const login_id = localStorage.getItem('active_loginid');
+    if (login_id && login_id !== 'null') return login_id;
+
     const token = V2GetActiveToken();
 
     if (!token) return null;

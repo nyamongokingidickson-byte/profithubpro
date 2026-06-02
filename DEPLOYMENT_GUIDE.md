@@ -195,10 +195,10 @@ Vercel will automatically deploy. Verify deployment:
 
 ### Local Testing (if running with localhost)
 
-1. Set `REDIRECT_URI=http://localhost:3000` in `.env.local`
-2. Update Deriv OAuth app redirect URI to `http://localhost:3000`
+1. Set `REDIRECT_URI=http://localhost:8443` in `.env.local`
+2. Update Deriv OAuth app redirect URI to `http://localhost:8443`
 3. Start development server
-4. Visit `http://localhost:3000/auth`
+4. Visit `http://localhost:8443/auth`
 
 ### Production Testing (https://extradollarhub.site)
 

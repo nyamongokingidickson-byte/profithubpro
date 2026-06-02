@@ -111,7 +111,7 @@ const AdminOnboardingWizard: React.FC<AdminOnboardingWizardProps> = ({
         switch (stepId) {
             case 'site-info':
                 if (!config.siteUrl) newErrors.siteUrl = 'Site URL is required';
-                if (!config.siteUrl.startsWith('https://') && config.siteUrl !== 'http://localhost:3000') {
+                if (!config.siteUrl.startsWith('https://') && config.siteUrl !== 'http://localhost:8443') {
                     newErrors.siteUrl = 'Site URL must use HTTPS or be localhost';
                 }
                 break;

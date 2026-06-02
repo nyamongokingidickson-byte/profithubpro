@@ -134,16 +134,18 @@ class APIBase {
                             const account_list = Object.values(clientAccounts).map((acc: any) => ({
                                 loginid: acc.loginid,
                                 currency: acc.currency,
-                                is_virtual: acc.loginid.startsWith('VRTC') ? 1 : 0,
+                                is_virtual: acc.loginid.startsWith('VR') ? 1 : 0,
                             }));
                             const country = localStorage.getItem('client.country') || '';
+                            const activeAccount = clientAccounts[loginId];
+                            const currency = activeAccount?.currency || 'USD';
                             return {
                                 authorize: {
                                     loginid: loginId,
                                     account_list,
                                     country,
-                                    currency: 'USD',
-                                    is_virtual: loginId.startsWith('VRTC') ? 1 : 0,
+                                    currency: currency,
+                                    is_virtual: loginId.startsWith('VR') ? 1 : 0,
                                 },
                                 error: null
                             };

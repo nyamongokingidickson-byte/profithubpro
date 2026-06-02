@@ -1,5 +1,5 @@
 import { website_name } from '@/utils/site-config';
-import { domain_app_ids, getAppId, normalizeDomain } from '../config/config';
+import { domain_app_ids, getAppId, normalizeDomain, generateOAuthURL } from '../config/config';
 import { CookieStorage, isStorageSupported, LocalStore } from '../storage/storage';
 import { getStaticUrl, urlForCurrentDomain } from '../url';
 import { deriv_urls } from '../url/constants';
@@ -10,9 +10,13 @@ export const redirectToLogin = (is_logged_in: boolean, language: string, has_par
         const redirect_url = has_params ? window.location.href : `${l.protocol}//${l.host}${l.pathname}`;
         sessionStorage.setItem('redirect_url', redirect_url);
         sessionStorage.setItem('auth_return_origin', window.location.origin);
-        setTimeout(() => {
-            const new_href = loginUrl({ language });
-            window.location.href = new_href;
+        setTimeout(async () => {
+            try {
+                const new_href = await generateOAuthURL();
+                window.location.href = new_href;
+            } catch (error) {
+                console.error('Failed to redirect to login:', error);
+            }
         }, redirect_delay);
     }
 };

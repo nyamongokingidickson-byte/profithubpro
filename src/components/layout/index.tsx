@@ -4,8 +4,8 @@ import Cookies from 'js-cookie';
 import { Outlet } from 'react-router-dom';
 import { api_base } from '@/external/bot-skeleton';
 import useTMB from '@/hooks/useTMB';
+import { generateOAuthURL } from '@/components/shared';
 import { handleOidcAuthFailure } from '@/utils/auth-utils';
-import { requestOidcAuthentication } from '@deriv-com/auth-client';
 import { useDevice } from '@deriv-com/ui';
 import { crypto_currencies_display_order, fiat_currencies_display_order } from '../shared';
 import Footer from './footer';
@@ -179,16 +179,11 @@ const Layout = () => {
                         sessionStorage.setItem('query_param_currency', query_param_currency);
                     }
                     try {
-                        await requestOidcAuthentication({
-                            redirectCallbackUri: `${window.location.origin}/callback`,
-                            state: {
-                                ...(query_param_currency ? { account: query_param_currency } : {}),
-                                return_origin: window.location.origin,
-                            },
-                        });
-                    } catch (err) {
+                        const oauthUrl = await generateOAuthURL();
+                        window.location.replace(oauthUrl);
+                    } catch (redirectError) {
+                        console.error('OAuth redirect failed:', redirectError);
                         setIsAuthenticating(false);
-                        handleOidcAuthFailure(err);
                     }
                 }
             } catch (err) {

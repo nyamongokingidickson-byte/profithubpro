@@ -134,16 +134,17 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
                 const accountsData = await accountsResponse.json();
                 console.log('📡 [Frontend] Accounts data received:', accountsData);
                 const accountsList: Record<string, string> = {};
-                const clientAccounts: Record<string, { loginid: string; token: string; currency: string }> = {};
+                const clientAccounts: Record<string, { loginid: string; token: string; currency: string; balance: number }> = {};
 
                 if (Array.isArray(accountsData?.data)) {
-                    accountsData.data.forEach((account: { account_id: string; currency?: string }) => {
+                    accountsData.data.forEach((account: { account_id: string; currency?: string; balance?: number }) => {
                         if (account.account_id) {
                             accountsList[account.account_id] = access_token;
                             clientAccounts[account.account_id] = {
                                 loginid: account.account_id,
                                 token: access_token,
                                 currency: account.currency || '',
+                                balance: account.balance || 0,
                             };
                         }
                     });

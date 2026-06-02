@@ -184,7 +184,9 @@ class DerivApiService {
     }
 
     public send(request: Record<string, unknown>): void {
-        const transformedRequest = transformRequest(request as any);
+        // Determine the message type for request transformation
+        const msgType = Object.keys(request).find(k => k !== 'req_id' && k !== 'subscribe') || '';
+        const transformedRequest = transformRequest(request as any, msgType);
         const req_id = ++this.lastReqId;
         const msg = { ...transformedRequest, req_id };
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -195,9 +197,10 @@ class DerivApiService {
     }
 
     public sendRequest(request: Record<string, unknown>, timeoutMs: number = 30000): Promise<TDerivResponse> {
-        const transformedRequest = transformRequest(request as any);
-
         return new Promise((resolve, reject) => {
+            // Determine message type for proper transformation
+            const msgType = Object.keys(request).find(k => k !== 'req_id' && k !== 'subscribe') || '';
+            const transformedRequest = transformRequest(request as any, msgType);
             const req_id = ++this.lastReqId;
             const msg = { ...transformedRequest, req_id };
 
@@ -235,7 +238,9 @@ class DerivApiService {
     }
 
     public subscribe(request: Record<string, unknown>, callback: TSubscriptionCallback): () => void {
-        const transformedRequest = transformRequest(request as any);
+        // Determine message type for transformation
+        const msgType = Object.keys(request).find(k => k !== 'req_id' && k !== 'subscribe') || '';
+        const transformedRequest = transformRequest(request as any, msgType);
         const subscriptionKey = this.getSubscriptionKey(transformedRequest);
 
         // Tracking the subscription even if disconnected
@@ -268,7 +273,8 @@ class DerivApiService {
             return;
         }
 
-        const transformedData = transformResponse(data);
+        // Transform incoming response based on its message type
+        const transformedData = transformResponse(data, data.msg_type);
 
         // Handle pending requests via req_id
         if (transformedData.req_id) {
@@ -302,12 +308,12 @@ class DerivApiService {
             console.debug(`[DerivApiService] Latency: ${this.latency}ms`);
         }
 
-        // Handle errors
+        // Handle generic API errors
         if (transformedData.error) {
             this.handleApiError(transformedData.error);
         }
 
-        // Dispatch to subscribers
+        // Dispatch to subscribers using transformed data
         this.subscriptions.forEach(sub => {
             // Simple match logic, could be refined based on echo_req or msg_type
             if (this.isMatchingResponse(sub.request, transformedData)) {

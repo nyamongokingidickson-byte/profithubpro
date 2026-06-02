@@ -67,6 +67,7 @@ export default class ClientStore {
     };
 
     constructor() {
+        this.initializeAllAccountsBalance();
         this.authDataSubscription = authData$.subscribe(authData => {
             if (authData) {
                 this.setLoginId(authData.loginid);
@@ -101,6 +102,7 @@ export default class ClientStore {
                             this.setBalance(String(active_account.balance));
                             this.setCurrency(active_account.currency);
                         }
+                        this.initializeAllAccountsBalance();
                     } catch (e) {
                         console.warn('[ClientStore] Failed to load cached balance:', e);
                     }
@@ -142,6 +144,7 @@ export default class ClientStore {
             setAccountList: action,
             setAccountSettings: action,
             setAccountStatus: action,
+            initializeAllAccountsBalance: action,
             setAllAccountsBalance: action,
             setBalance: action,
             setCurrency: action,
@@ -394,8 +397,49 @@ export default class ClientStore {
         this.upgradeable_landing_companies = upgradeable_landing_companies;
     };
 
+    initializeAllAccountsBalance = () => {
+        try {
+            const client_accounts = JSON.parse(localStorage.getItem('clientAccounts') || '{}');
+            if (Object.keys(client_accounts).length > 0) {
+                const accounts: Record<string, any> = {};
+                Object.entries(client_accounts).forEach(([loginid, acc]: [string, any]) => {
+                    accounts[loginid] = {
+                        balance: acc.balance ?? 0,
+                        currency: acc.currency ?? '',
+                        demo_account: loginid.startsWith('VR') ? 1 : 0,
+                        type: 'deriv',
+                    };
+                });
+                this.setAllAccountsBalance({
+                    accounts,
+                    balance: this.balance ? Number(this.balance) : 0,
+                    currency: this.currency,
+                    loginid: this.loginid,
+                } as any);
+            }
+        } catch (e) {
+            console.warn('[ClientStore] Failed to initialize all accounts balance:', e);
+        }
+    };
+
     setAllAccountsBalance = (all_accounts_balance: Balance | undefined) => {
-        this.all_accounts_balance = all_accounts_balance ?? null;
+        if (!all_accounts_balance) {
+            this.all_accounts_balance = null;
+            return;
+        }
+
+        if (this.all_accounts_balance && this.all_accounts_balance.accounts && all_accounts_balance.accounts) {
+            this.all_accounts_balance = {
+                ...this.all_accounts_balance,
+                ...all_accounts_balance,
+                accounts: {
+                    ...this.all_accounts_balance.accounts,
+                    ...all_accounts_balance.accounts,
+                },
+            };
+        } else {
+            this.all_accounts_balance = all_accounts_balance;
+        }
     };
 
     setIsLoggingOut = (is_logging_out: boolean) => {

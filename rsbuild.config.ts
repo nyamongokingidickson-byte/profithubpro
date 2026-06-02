@@ -93,7 +93,7 @@ export default defineConfig({
         template: './index.html',
     },
     server: {
-        port: 3000,
+        port: 8443,
         host: '0.0.0.0', // Allow external connections
         compress: true,
         historyApiFallback: true, // Enable client-side routing fallback

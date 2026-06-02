@@ -272,27 +272,11 @@ const AppWrapper = observer(() => {
             const query_param_currency = currency || sessionStorage.getItem('query_param_currency') || 'USD';
 
             try {
-                // First, explicitly wait for TMB status to be determined
-                const tmbEnabled = await isTmbEnabled();
-                // Now use the result of the explicit check
-                if (tmbEnabled) {
-                    await onRenderTMBCheck();
-                } else {
-                    try {
-                        await requestOidcAuthentication({
-                            redirectCallbackUri: `${window.location.origin}/callback`,
-                            state: {
-                                ...(query_param_currency ? { account: query_param_currency } : {}),
-                                return_origin: window.location.origin,
-                            },
-                        });
-                    } catch (err) {
-                        handleOidcAuthFailure(err);
-                    }
-                }
-            } catch (error) {
-                // eslint-disable-next-line no-console
-                console.error(error);
+                const oauthUrl = await generateOAuthURL();
+                console.log('Main page login redirecting to OAuth URL:', oauthUrl);
+                window.location.replace(oauthUrl);
+            } catch (redirectError) {
+                console.error('Explicit OAuth redirect failed:', redirectError);
             }
         }
     };

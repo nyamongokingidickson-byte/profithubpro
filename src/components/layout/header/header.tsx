@@ -1,7 +1,8 @@
 import { useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { observer } from 'mobx-react-lite';
-import { generateOAuthURL, standalone_routes } from '@/components/shared';
+import { startLogin, startSignup } from '@/lib/auth';
+import { standalone_routes, getLegacyAppId } from '@/components/shared';
 import Button from '@/components/shared_ui/button';
 import useActiveAccount from '@/hooks/api/account/useActiveAccount';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
@@ -12,7 +13,7 @@ import useTMB from '@/hooks/useTMB';
 import { handleOidcAuthFailure } from '@/utils/auth-utils';
 import { StandaloneCircleUserRegularIcon } from '@deriv/quill-icons/Standalone';
 
-import { requestOidcAuthentication } from '@deriv-com/auth-client';
+
 import { Localize, useTranslations } from '@deriv-com/translations';
 import { Header, useDevice, Wrapper } from '@deriv-com/ui';
 import { Tooltip } from '@deriv-com/ui';
@@ -138,43 +139,8 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                     <Button
                         tertiary
                         className='auth-login-button'
-                        onClick={async () => {
-                            const getQueryParams = new URLSearchParams(window.location.search);
-                            const currency = getQueryParams.get('account') ?? '';
-                            const query_param_currency =
-                                currency || sessionStorage.getItem('query_param_currency') || 'USD';
-
-                            try {
-                                // First, explicitly wait for TMB status to be determined
-                                const tmbEnabled = await isTmbEnabled();
-                                // Now use the result of the explicit check
-                                if (tmbEnabled) {
-                                    await onRenderTMBCheck(true); // Pass true to indicate it's from login button
-                                } else {
-                                    // Always use OIDC if TMB is not enabled
-                                    try {
-                                        await requestOidcAuthentication({
-                                            redirectCallbackUri: `${window.location.origin}/callback`,
-                                            state: {
-                                                ...(query_param_currency ? { account: query_param_currency } : {}),
-                                                return_origin: window.location.origin,
-                                            },
-                                        });
-                                    } catch (err) {
-                                        handleOidcAuthFailure(err);
-                                        sessionStorage.setItem('auth_return_origin', window.location.origin);
-                                        window.location.replace(await generateOAuthURL());
-                                    }
-                                }
-                            } catch (error) {
-                                // eslint-disable-next-line no-console
-                                console.error('Login button failed, falling back to OAuth redirect:', error);
-                                try {
-                                    window.location.replace(await generateOAuthURL());
-                                } catch (redirectError) {
-                                    console.error('Fallback OAuth redirect failed:', redirectError);
-                                }
-                            }
+                        onClick={() => {
+                            startLogin();
                         }}
                     >
                         <Localize i18n_default_text='Log in' />
@@ -183,7 +149,7 @@ const AppHeader = observer(({ isAuthenticating }: TAppHeaderProps) => {
                         primary
                         className='auth-signup-button'
                         onClick={() => {
-                            window.open(standalone_routes.signup);
+                            startSignup();
                         }}
                     >
                         <Localize i18n_default_text='Sign up' />
