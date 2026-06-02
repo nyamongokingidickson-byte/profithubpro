@@ -27,17 +27,12 @@ export function createState(): string {
     return generateRandomString(16);
 }
 
-const PKCE_CODE_VERIFIER_KEY = 'pkce_code_verifier';
-const PKCE_STATE_KEY = 'pkce_state';
+const OAUTH_CODE_VERIFIER_KEY = 'oauth_code_verifier';
+const OAUTH_STATE_KEY = 'oauth_state';
 
 const setStorageItem = (key: string, value: string) => {
     try {
         sessionStorage.setItem(key, value);
-    } catch {
-        // ignore storage failures
-    }
-    try {
-        localStorage.setItem(key, value);
     } catch {
         // ignore storage failures
     }
@@ -49,47 +44,35 @@ const removeStorageItem = (key: string) => {
     } catch {
         // ignore storage failures
     }
-    try {
-        localStorage.removeItem(key);
-    } catch {
-        // ignore storage failures
-    }
 };
 
 const getStorageItem = (key: string): string | null => {
     try {
-        const sessionValue = sessionStorage.getItem(key);
-        if (sessionValue) return sessionValue;
+        return sessionStorage.getItem(key);
     } catch {
-        // ignore
-    }
-    try {
-        const localValue = localStorage.getItem(key);
-        if (localValue) return localValue;
-    } catch {
-        // ignore
+        // ignore storage failures
     }
     return null;
 };
 
 export const storePKCEState = (verifier: string, state: string) => {
-    setStorageItem(PKCE_CODE_VERIFIER_KEY, verifier);
-    setStorageItem(PKCE_STATE_KEY, state);
+    setStorageItem(OAUTH_CODE_VERIFIER_KEY, verifier);
+    setStorageItem(OAUTH_STATE_KEY, state);
 };
 
 export const popPKCEVerifier = (): string | null => {
-    const verifier = getStorageItem(PKCE_CODE_VERIFIER_KEY);
-    removeStorageItem(PKCE_CODE_VERIFIER_KEY);
+    const verifier = getStorageItem(OAUTH_CODE_VERIFIER_KEY);
+    removeStorageItem(OAUTH_CODE_VERIFIER_KEY);
     return verifier;
 };
 
 export const clearPKCEVerifier = () => {
-    removeStorageItem(PKCE_CODE_VERIFIER_KEY);
-    removeStorageItem(PKCE_STATE_KEY);
+    removeStorageItem(OAUTH_CODE_VERIFIER_KEY);
+    removeStorageItem(OAUTH_STATE_KEY);
 };
 
 export const validatePKCEState = (incomingState: string): boolean => {
-    const savedState = getStorageItem(PKCE_STATE_KEY);
+    const savedState = getStorageItem(OAUTH_STATE_KEY);
     return incomingState === savedState;
 };
 

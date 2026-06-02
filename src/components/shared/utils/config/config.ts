@@ -178,6 +178,9 @@ export const generateOAuthURL = async (prompt?: string) => {
     const code_verifier = createCodeVerifier();
     const code_challenge = await createCodeChallenge(code_verifier);
     const state = createState();
+
+    // Clear any stale PKCE values before storing a fresh login attempt
+    clearPKCEVerifier();
     storePKCEState(code_verifier, state);
 
     console.log('🔐 [Frontend] PKCE State stored:', { 
