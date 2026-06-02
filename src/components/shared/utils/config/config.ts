@@ -62,7 +62,7 @@ export const getLegacyAppId = (): number | null => {
 
 export const isLegacyModeEnabled = (): boolean => {
     const storedLegacyMode = window.localStorage.getItem(LEGACY_MODE_STORAGE_KEY);
-    return storedLegacyMode === '1' || storedLegacyMode === 'true';
+    return storedLegacyMode === '1' || storedLegacyMode === 'true' || !!LEGACY_APP_ID_ENV;
 };
 
 const getDefaultServerURL = () => {
