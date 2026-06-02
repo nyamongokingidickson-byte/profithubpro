@@ -1,4 +1,4 @@
-import { getAppId } from '@/components/shared/utils/config/config';
+import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
 import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
 
 export enum ConnectionState {
@@ -16,8 +16,8 @@ export type TDerivResponse = {
         code: string;
         message: string;
     };
-    echo_req: Record<string, any>;
-    [key: string]: any;
+    echo_req: Record<string, unknown>;
+    [key: string]: unknown;
 };
 
 type TSubscriptionCallback = (data: TDerivResponse) => void;
@@ -26,8 +26,12 @@ class DerivApiService {
     private static instance: DerivApiService;
     private ws: WebSocket | null = null;
     private appId: string;
-    private endpoint: string = 'wss://ws.derivws.com/websockets/v3';
     private state: ConnectionState = ConnectionState.DISCONNECTED;
+
+    private getEndpoint(): string {
+        const serverUrl = getSocketURL();
+        return `wss://${serverUrl}/websockets/v3?app_id=${this.appId}`;
+    }
     private reconnectAttempts: number = 0;
     private maxReconnectDelay: number = 5000;
     private minReconnectDelay: number = 2000;
@@ -73,7 +77,7 @@ class DerivApiService {
         this.setState(ConnectionState.CONNECTING);
 
         try {
-            this.ws = new WebSocket(`${this.endpoint}?app_id=${this.appId}`);
+            this.ws = new WebSocket(this.getEndpoint());
 
             this.ws.onopen = () => {
                 console.log('[DerivApiService] WebSocket connected');

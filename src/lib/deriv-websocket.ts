@@ -1,4 +1,4 @@
-import { getAppId } from '@/components/shared/utils/config/config';
+import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
 
 type TCallback = (data: any) => void;
 
@@ -8,10 +8,14 @@ class DerivWebSocket {
     private listeners: Map<string, Set<TCallback>> = new Map();
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 10;
-    private endpoint = 'wss://ws.derivws.com/websockets/v3';
 
     constructor(appId?: string) {
-        this.appId = appId || getAppId();
+        this.appId = appId || getAppId().toString();
+    }
+
+    private getEndpoint(): string {
+        const serverUrl = getSocketURL();
+        return `wss://${serverUrl}/websockets/v3?app_id=${this.appId}`;
     }
 
     public connect(): Promise<void> {
@@ -22,7 +26,7 @@ class DerivWebSocket {
                 }
 
                 console.log(`[DerivWebSocket] Connecting with App ID: ${this.appId}`);
-                this.ws = new WebSocket(`${this.endpoint}?app_id=${this.appId}`);
+                this.ws = new WebSocket(this.getEndpoint());
 
                 this.ws.onopen = () => {
                     console.log('[DerivWebSocket] Connected');

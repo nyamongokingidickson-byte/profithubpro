@@ -1,4 +1,4 @@
-import { createCodeChallenge, createCodeVerifier, createState, storePKCEState } from '@/utils/pkce';
+import { createCodeChallenge, createCodeVerifier, createState, storePKCEState, clearPKCEVerifier } from '@/utils/pkce';
 import { isStaging } from '../url/helpers';
 
 export const DERIV_NEW_AUTH_URL = 'https://auth.deriv.com/oauth2/auth';
@@ -86,6 +86,15 @@ export const getDefaultAppIdAndUrl = () => {
 };
 
 export const getAppId = () => {
+    // If legacy mode is enabled, use legacy app ID
+    if (isLegacyModeEnabled()) {
+        const legacyAppId = getLegacyAppId();
+        if (legacyAppId) {
+            console.log('🔐 [Frontend] Using legacy app ID:', legacyAppId);
+            return legacyAppId;
+        }
+    }
+    
     // Check localStorage first for user-configured app ID
     const stored_app_id = window.localStorage.getItem('config.app_id');
     if (stored_app_id) return Number(stored_app_id);

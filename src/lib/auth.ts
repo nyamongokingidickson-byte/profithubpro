@@ -1,6 +1,6 @@
 import Cookies from 'js-cookie';
-import { getAppId, getRedirectUri } from '@/components/shared/utils/config/config';
-import { clearPKCEVerifier, popPKCEVerifier, validatePKCEState } from '@/utils/pkce';
+import { getRedirectUri } from '@/components/shared/utils/config/config';
+import { clearPKCEVerifier, popPKCEVerifier, validatePKCEState } from '../utils/pkce';
 import derivApiService from '@/lib/deriv-api-service';
 
 export async function startLogin(): Promise<void> {

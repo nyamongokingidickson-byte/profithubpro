@@ -1,5 +1,6 @@
 import { action, makeObservable, observable, runInAction } from 'mobx';
 import DerivWS from '@/services/DerivWS';
+import { transformProposalRequest, transformBuyRequest, transformProposalOpenContractRequest } from '@/utils/api-migration-adapter';
 import { DigitStatsEngine } from '@/lib/digit-stats-engine';
 import RootStore from './root-store';
 
@@ -517,11 +518,14 @@ export default class FreeBotsStore {
                 proposal_data.barrier = String(prediction);
             }
 
-            const proposal = (await api.send(proposal_data)) as any;
+            const transformedProposal = transformProposalRequest(proposal_data);
+            const proposal = (await api.send(transformedProposal)) as any;
             if (proposal.error) throw new Error(proposal.error.message);
             if (!proposal.proposal?.id) throw new Error('No proposal ID');
 
-            const buy = (await api.send({ buy: proposal.proposal.id, price: stake })) as any;
+            const buy_request = { buy: proposal.proposal.id, price: stake };
+            const transformedBuy = transformBuyRequest(buy_request);
+            const buy = (await api.send(transformedBuy)) as any;
             if (buy.error) throw new Error(buy.error.message);
 
             addLog(`✅ Contract: ${buy.buy.contract_id}`, 'info');
@@ -530,10 +534,12 @@ export default class FreeBotsStore {
             // Poll result
             const check = setInterval(async () => {
                 try {
-                    const result = (await api.send({
+                    const poc_request = {
                         proposal_open_contract: 1,
                         contract_id: buy.buy.contract_id,
-                    })) as any;
+                    };
+                    const transformedPOC = transformProposalOpenContractRequest(poc_request);
+                    const result = (await api.send(transformedPOC)) as any;
                     const poc = result.proposal_open_contract;
                     if (poc?.is_sold) {
                         clearInterval(check);

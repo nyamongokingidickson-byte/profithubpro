@@ -234,6 +234,24 @@ export const transformSellRequest = (
     return newRequest;
 };
 
+/**
+ * Transform legacy forget request to new API format
+ */
+export const transformForgetRequest = (
+    legacyRequest: any
+): any => {
+    return legacyRequest;
+};
+
+/**
+ * Transform legacy forget_all request to new API format
+ */
+export const transformForgetAllRequest = (
+    legacyRequest: any
+): any => {
+    return legacyRequest;
+};
+
 // ============================================================================
 // RESPONSE TRANSFORMATIONS (New → Legacy-compatible format, or vice versa)
 // ============================================================================
@@ -473,6 +491,10 @@ export const transformRequest = (
             return transformProposalOpenContractRequest(request);
         case 'sell':
             return transformSellRequest(request);
+        case 'forget':
+            return transformForgetRequest(request);
+        case 'forget_all':
+            return transformForgetAllRequest(request);
         default:
             return request;
     }

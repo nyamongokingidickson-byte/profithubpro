@@ -1,11 +1,11 @@
 import DerivAuth from './DerivAuth';
+import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
+import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
 
-type MessageHandler = (data: any) => void;
-
-export class DerivWS {
-    private static _instance: DerivWS | null = null;
+export type MessageHandler = (data: any) => void;
+class DerivWS {
+    private static _instance: DerivWS;
     private ws: WebSocket | null = null;
-    private url: string;
     private loginId: string | null = null;
     private handlers = new Map<string, MessageHandler>();
     private responseHandlers = new Map<string, (data: any) => void>();
@@ -20,10 +20,15 @@ export class DerivWS {
     }
 
     private constructor() {
-        this.url = (process.env.DERIV_WS_URL as string) || 'wss://ws.binaryws.com/websockets/v3';
         if (typeof window !== 'undefined') {
             document.addEventListener('visibilitychange', () => this.onVisibilityChange());
         }
+    }
+
+    private getUrl() {
+        const appId = getAppId();
+        const serverUrl = getSocketURL();
+        return `wss://${serverUrl}/websockets/v3?app_id=${appId}`;
     }
 
     get isConnected() {
@@ -40,7 +45,7 @@ export class DerivWS {
     async connect(loginId?: string) {
         if (loginId) this.loginId = loginId;
         const token = DerivAuth.getToken();
-        const url = `${this.url}?app_id=${process.env.APP_ID || ''}`;
+        const url = this.getUrl();
         if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
         if (this.ws && this.ws.readyState === WebSocket.CONNECTING && this.openingPromise) {
             return this.openingPromise;
@@ -80,7 +85,9 @@ export class DerivWS {
                 return;
             }
             const reqId = payload.req_id || `req_${Date.now()}_${++this.requestCounter}`;
-            const message = { ...payload, req_id: reqId };
+            const msgType = Object.keys(payload).find(k => k !== 'req_id' && k !== 'subscribe') || '';
+            const transformed = transformRequest(payload, msgType);
+            const message = { ...transformed, req_id: reqId };
             const timeout = setTimeout(() => {
                 this.responseHandlers.delete(reqId);
                 reject(new Error(`DerivWS.send timeout for req_id ${reqId}`));
@@ -89,7 +96,8 @@ export class DerivWS {
             this.responseHandlers.set(reqId, (data) => {
                 clearTimeout(timeout);
                 this.responseHandlers.delete(reqId);
-                resolve(data);
+                const transformedData = transformResponse(data, data.msg_type);
+                resolve(transformedData);
             });
             this.ws.send(JSON.stringify(message));
         });
@@ -97,8 +105,13 @@ export class DerivWS {
 
     subscribe(payload: Record<string, any>, cb: MessageHandler) {
         const id = `sub_${Date.now()}_${this.subIndex++}`;
-        this.handlers.set(id, cb);
-        const message = { ...payload, subscribe: 1, req_id: id };
+        this.handlers.set(id, (data) => {
+            const transformedData = transformResponse(data, data.msg_type);
+            cb(transformedData);
+        });
+        const msgType = Object.keys(payload).find(k => k !== 'req_id' && k !== 'subscribe') || '';
+        const transformed = transformRequest(payload, msgType);
+        const message = { ...transformed, subscribe: 1, req_id: id };
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(message));
         } else {

@@ -2,6 +2,7 @@ import { action, makeObservable, observable, reaction, runInAction } from 'mobx'
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { contract_stages } from '@/constants/contract-stage';
 import { api_base, ApiHelpers, observer as globalObserver } from '@/external/bot-skeleton';
+import { transformRequest, transformProposalRequest, transformBuyRequest, transformProposalOpenContractRequest, transformSellRequest } from '@/utils/api-migration-adapter';
 import {
     HotColdData,
     PredictionResult,
@@ -1004,7 +1005,7 @@ export default class SmartTradingStore {
 
             console.log(`[SmartTrading] Subscribed to ${this.symbol} via direct API`);
         } catch (error) {
-            console.error('[SmartTrading] Tick subscription failed:', error);
+            console.error('[SmartTrading] Tick subscription failed:', JSON.stringify(error, null, 2));
             if (retry_count < 3) {
                 setTimeout(() => this.subscribeToActiveSymbol(retry_count + 1), 2000);
             }
@@ -1200,18 +1201,23 @@ export default class SmartTradingStore {
                     ...(trade.barrier !== undefined && { barrier: trade.barrier }),
                 };
 
-                const proposal_response = await api_base.api.send(proposal_request);
+                const transformedProposal = transformProposalRequest(proposal_request);
+                const proposal_response = await api_base.api.send(transformedProposal);
                 if (proposal_response.error || !proposal_response.proposal?.id) return;
 
-                const buy_response = await api_base.api.send({
+                const buy_request = {
                     buy: proposal_response.proposal.id,
                     price: this.current_stake,
-                });
+                };
+                const transformedBuy = transformBuyRequest(buy_request);
+                const buy_response = await api_base.api.send(transformedBuy);
 
                 if (buy_response.error || !buy_response.buy?.contract_id) return;
 
+                const poc_request = { proposal_open_contract: 1, contract_id: buy_response.buy.contract_id };
+                const transformedPOC = transformProposalOpenContractRequest(poc_request);
                 api_base.api.subscribe(
-                    { proposal_open_contract: 1, contract_id: buy_response.buy.contract_id },
+                    transformedPOC,
                     (response: any) => {
                         if (response.proposal_open_contract?.is_sold) {
                             const status = response.proposal_open_contract.status;
@@ -1433,7 +1439,8 @@ export default class SmartTradingStore {
                 proposal_request.barrier = barrier;
             }
 
-            const proposal_response = await api_base.api.send(proposal_request);
+            const transformedProposal = transformProposalRequest(proposal_request);
+            const proposal_response = await api_base.api.send(transformedProposal);
 
             if (proposal_response.error) {
                 console.error('SmartTrading Speedbot Proposal Error:', proposal_response.error);
@@ -1447,10 +1454,12 @@ export default class SmartTradingStore {
                 return;
             }
 
-            const buy_response = await api_base.api.send({
+            const buy_request = {
                 buy: proposal_id,
                 price: stake,
-            });
+            };
+            const transformedBuy = transformBuyRequest(buy_request);
+            const buy_response = await api_base.api.send(transformedBuy);
 
             if (buy_response.error) {
                 console.error('SmartTrading Speedbot Buy Error:', buy_response.error);
@@ -2191,7 +2200,8 @@ export default class SmartTradingStore {
                 proposal_request.barrier = String(prediction);
             }
 
-            const proposal_response = await api_base.api.send(proposal_request);
+            const transformedProposal = transformProposalRequest(proposal_request);
+            const proposal_response = await api_base.api.send(transformedProposal);
 
             if (proposal_response.error) {
                 console.error('SmartTrading Manual Proposal Error:', proposal_response.error);
@@ -2201,10 +2211,12 @@ export default class SmartTradingStore {
             }
 
             const proposal_id = proposal_response.proposal?.id;
-            const buy_response = await api_base.api.send({
+            const buy_request = {
                 buy: proposal_id,
                 price: stake,
-            });
+            };
+            const transformedBuy = transformBuyRequest(buy_request);
+            const buy_response = await api_base.api.send(transformedBuy);
 
             if (buy_response.error) {
                 console.error('SmartTrading Manual Buy Error:', buy_response.error);
@@ -3280,17 +3292,20 @@ export default class SmartTradingStore {
                     ...(barrier !== undefined ? { barrier: String(barrier) } : {}),
                 };
 
-                const response = await api_base.api.send(proposal_request);
+                const transformedProposal = transformProposalRequest(proposal_request);
+                const response = await api_base.api.send(transformedProposal);
                 if (response.error) {
                     globalObserver.emit('ui.log.error', response.error.message);
                     return;
                 }
 
-                const buy_response = await api_base.api.send({
+                const buy_request = {
                     buy: response.proposal.id,
                     price: current_stake,
                     subscribe: 1,
-                });
+                };
+                const transformedBuy = transformBuyRequest(buy_request);
+                const buy_response = await api_base.api.send(transformedBuy);
 
                 if (buy_response.error) {
                     globalObserver.emit('ui.log.error', buy_response.error.message);
