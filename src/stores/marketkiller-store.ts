@@ -3,6 +3,7 @@ import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { DigitStatsEngine } from '@/lib/digit-stats-engine';
 import RootStore from './root-store';
 import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
+import { isSymbolAvailable } from '@/services/symbol-validator';
 
 type TMarketkillerSubtab = 'matches';
 
@@ -258,7 +259,7 @@ export default class MarketkillerStore {
         // Cleanup previous tick subscription ID if exists
         if (this.tick_subscription) {
             try {
-                await api_base.api.send({ forget: this.tick_subscription });
+                await api_base.unsubscribeById(this.tick_subscription);
             } catch (e) { /* ignore */ }
             this.tick_subscription = null;
         }
@@ -278,28 +279,17 @@ export default class MarketkillerStore {
 
         try {
             console.log('[Marketkiller] Subscribing to ticks for:', this.symbol);
-            const req = transformRequest({ ticks: this.symbol, subscribe: 1 }, 'ticks');
-            const response = await api_base.api.send(req);
-
-            if (response.error) {
-                console.error('[Marketkiller] Tick Subscription failed:', response.error);
+            const ok = await isSymbolAvailable(this.symbol);
+            if (!ok) {
+                console.warn('[Marketkiller] Symbol not available, aborting subscribe:', this.symbol);
                 return;
             }
-
-            // Extract subscription ID safely
-            this.tick_subscription = response.subscription?.id || response.tick?.id;
-
-            // Register fresh RxJS event listener for the tick stream
-            if (api_base.api.onMessage) {
-                this.tick_listener_sub = api_base.api.onMessage().subscribe((res: any) => {
-                    if (res?.data?.msg_type === 'tick') {
-                        const transformed = transformResponse(res.data, 'tick');
-                        if (transformed?.tick?.symbol === this.symbol) {
-                            this.onTickArrival(transformed.tick);
-                        }
-                    }
-                });
-            }
+            const subId = await api_base.subscribeTo({ ticks: this.symbol }, (res: any) => {
+                if (res?.tick && res.tick.symbol === this.symbol) {
+                    this.onTickArrival(res.tick);
+                }
+            });
+            this.tick_subscription = subId;
         } catch (error: any) {
             console.error('Marketkiller tick sub error:', error?.message || error);
         }
@@ -311,33 +301,25 @@ export default class MarketkillerStore {
 
         this.live_market_ribbon.forEach(async m => {
             try {
-                const req = transformRequest({ ticks: m.symbol, subscribe: 1 }, 'ticks');
-                const response = await api_base.api.send(req);
-                if (response.subscription) {
-                    this.ribbon_subscriptions.set(m.symbol, response.subscription.id);
-                }
+                const subId = await api_base.subscribeTo({ ticks: m.symbol }, (res: any) => {
+                    if (res?.tick) {
+                        const tick = res.tick;
+                        const index = this.live_market_ribbon.findIndex(x => x?.symbol === tick.symbol);
+                        if (index !== -1) {
+                            runInAction(() => {
+                                const mm = this.live_market_ribbon[index];
+                                if (!mm) return;
+                                const price = parseFloat(tick.quote).toFixed(tick.pip_size || 2);
+                                mm.is_up = parseFloat(price) >= parseFloat(String(mm.price));
+                                mm.price = price;
+                                mm.digit = parseInt(price.slice(-1));
+                            });
+                        }
+                    }
+                });
+                if (subId) this.ribbon_subscriptions.set(m.symbol, subId);
             } catch (e) {
                 // ignore
-            }
-        });
-
-        api_base.api.onMessage().subscribe((res: any) => {
-            if (res?.data?.msg_type === 'tick') {
-                const transformed = transformResponse(res.data, 'tick');
-                const tick = transformed?.tick;
-                if (tick) {
-                    const index = this.live_market_ribbon.findIndex(m => m?.symbol === tick.symbol);
-                    if (index !== -1) {
-                        runInAction(() => {
-                            const m = this.live_market_ribbon[index];
-                            if (!m) return;
-                            const price = parseFloat(tick.quote).toFixed(tick.pip_size || 2);
-                            m.is_up = parseFloat(price) >= parseFloat(String(m.price));
-                            m.price = price;
-                            m.digit = parseInt(price.slice(-1));
-                        });
-                    }
-                }
             }
         });
     };

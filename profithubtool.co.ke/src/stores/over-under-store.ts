@@ -82,16 +82,19 @@ export default class OverUnderStore {
     @action
     private fetchActiveSymbols() {
         if (!this.isApiReady()) return;
-        api_base.api!.send({ active_symbols: 'brief', product_type: 'basic' }).then((res: any) => {
-            if (res?.active_symbols) {
-                const filtered = res.active_symbols
-                    .filter((s: any) => s.market === 'synthetic_index' && s.submarket === 'random_index')
-                    .map((s: any) => ({ symbol: s.symbol, display_name: s.display_name }));
-                runInAction(() => {
-                    this.active_symbols = filtered;
-                });
-            }
-        }).catch((e: any) => console.warn('[OverUnderStore] fetchActiveSymbols error:', e));
+        api_base
+            .getActiveSymbols()
+            .then((symbols: any) => {
+                if (Array.isArray(symbols)) {
+                    const filtered = symbols
+                        .filter((s: any) => s.market === 'synthetic_index' && s.submarket === 'random_index')
+                        .map((s: any) => ({ symbol: s.symbol, display_name: s.display_name }));
+                    runInAction(() => {
+                        this.active_symbols = filtered;
+                    });
+                }
+            })
+            .catch((e: any) => console.warn('[OverUnderStore] fetchActiveSymbols error:', e));
     }
 
     @action

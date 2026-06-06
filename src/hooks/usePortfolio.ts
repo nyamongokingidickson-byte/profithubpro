@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import derivApiService, { TDerivResponse } from '@/lib/deriv-api-service';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     transformPortfolioRequest,
     transformPortfolioResponse,
@@ -25,7 +25,9 @@ export const usePortfolio = (subscribe: boolean = true) => {
         const legacyRequest = { portfolio: 1, subscribe: subscribe ? 1 : 0 };
         const request = transformPortfolioRequest(legacyRequest);
 
-        const unsubscribe = derivApiService.subscribe(request, (data: TDerivResponse) => {
+        let subId: string | null = null;
+        let cancelled = false;
+        const cb = (data: any) => {
             if (data.error) {
                 setError(data.error.message);
             } else if (data.portfolio) {
@@ -33,12 +35,22 @@ export const usePortfolio = (subscribe: boolean = true) => {
                 setPortfolio(transformedData.portfolio.contracts || []);
             }
             setIsLoading(false);
-        });
+        };
+
+        (async () => {
+            try {
+                if (subscribe) {
+                    subId = await api_base.subscribeTo(request as any, cb as any);
+                    if (cancelled && subId) await api_base.unsubscribeById(subId);
+                }
+            } catch (e) {
+                console.warn('[usePortfolio] subscribe error', e);
+            }
+        })();
 
         return () => {
-            if (subscribe) {
-                unsubscribe();
-            }
+            cancelled = true;
+            if (subId) api_base.unsubscribeById(subId).catch(() => null);
         };
     }, [subscribe]);
 

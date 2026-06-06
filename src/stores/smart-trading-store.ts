@@ -986,10 +986,15 @@ export default class SmartTradingStore {
                 }
             }
 
-            // Setup real-time listener
-            const subscription = api_base.api.onMessage().subscribe((msg: any) => {
-                if (msg.msg_type === 'tick' && msg.tick && msg.tick.symbol === this.symbol) {
-                    const quote = msg.tick.quote;
+            // Setup real-time listener via centralized subscription manager
+            if (this.unsubscribeTicks) this.unsubscribeTicks();
+
+            let subId: string | null = null;
+            let cancelled = false;
+
+            const cb = (data: any) => {
+                if (data.msg_type === 'tick' && data.tick && data.tick.symbol === this.symbol) {
+                    const quote = data.tick.quote;
                     const price_str = String(quote);
                     const last_char = price_str[price_str.length - 1];
                     const digit = parseInt(last_char);
@@ -999,11 +1004,18 @@ export default class SmartTradingStore {
                         this.updateDigitStats(new_ticks, quote);
                     }
                 }
-            });
+            };
 
-            this.unsubscribeTicks = () => subscription.unsubscribe();
-
-            console.log(`[SmartTrading] Subscribed to ${this.symbol} via direct API`);
+            (async () => {
+                try {
+                    subId = await api_base.subscribeTo({ ticks: this.symbol }, cb as any);
+                    if (cancelled && subId) await api_base.unsubscribeById(subId);
+                    if (subId) this.unsubscribeTicks = () => api_base.unsubscribeById(subId);
+                    console.log(`[SmartTrading] Subscribed to ${this.symbol} via central API`);
+                } catch (e) {
+                    console.warn('[SmartTrading] subscribeTo ticks error', e);
+                }
+            })();
         } catch (error) {
             console.error('[SmartTrading] Tick subscription failed:', JSON.stringify(error, null, 2));
             if (retry_count < 3) {
@@ -3072,7 +3084,10 @@ export default class SmartTradingStore {
 
             const contract_id = buy.buy.contract_id;
 
-            const subscription = api_base.api.onMessage().subscribe((msg: any) => {
+            let subId: string | null = null;
+            let cancelled = false;
+
+            const cb = (msg: any) => {
                 if (
                     msg.msg_type === 'proposal_open_contract' &&
                     msg.proposal_open_contract.contract_id === contract_id
@@ -3097,11 +3112,20 @@ export default class SmartTradingStore {
                             });
                             this.session_pl += profit;
                             this.is_executing = false;
-                            subscription.unsubscribe();
+                            if (subId) api_base.unsubscribeById(subId).catch(() => null);
                         });
                     }
                 }
-            });
+            };
+
+            (async () => {
+                try {
+                    subId = await api_base.subscribeTo({ proposal_open_contract: 1, contract_id }, cb as any);
+                    if (cancelled && subId) await api_base.unsubscribeById(subId);
+                } catch (e) {
+                    console.warn('[SmartTrading] subscribeTo proposal_open_contract error', e);
+                }
+            })();
 
             // Safety timeout
             setTimeout(() => {
@@ -3109,7 +3133,7 @@ export default class SmartTradingStore {
                     if (this.is_executing) {
                         this.addScpLog('Trade tracking timeout', 'info');
                         this.is_executing = false;
-                        subscription.unsubscribe();
+                        if (subId) api_base.unsubscribeById(subId).catch(() => null);
                     }
                 });
             }, 15000);
@@ -3315,7 +3339,10 @@ export default class SmartTradingStore {
                 this.addLog(`Trade executed: ${contract_type} on ${symbol}`);
 
                 const contract_id = buy_response.buy.contract_id;
-                const subscription = api_base.api.onMessage().subscribe((msg: any) => {
+                let subId: string | null = null;
+                let cancelled = false;
+
+                const cb = (msg: any) => {
                     if (
                         msg.msg_type === 'proposal_open_contract' &&
                         msg.proposal_open_contract.contract_id === contract_id
@@ -3355,7 +3382,7 @@ export default class SmartTradingStore {
                                     timestamp: Date.now(),
                                     contractType: contract_type,
                                     stake: current_stake,
-                                    result: is_win ? 'WON' : 'LOST',
+                                    result: is_win ? 'WON' : 'LOSS',
                                     profitLoss: profit,
                                 });
 
@@ -3363,11 +3390,20 @@ export default class SmartTradingStore {
                                     this.manual_trade_history.pop();
                                 }
 
-                                subscription.unsubscribe();
+                                if (subId) api_base.unsubscribeById(subId).catch(() => null);
                             });
                         }
                     }
-                });
+                };
+
+                (async () => {
+                    try {
+                        subId = await api_base.subscribeTo({ proposal_open_contract: 1, contract_id }, cb as any);
+                        if (cancelled && subId) await api_base.unsubscribeById(subId);
+                    } catch (e) {
+                        console.warn('[SmartTrading] subscribeTo proposal_open_contract (manual) error', e);
+                    }
+                })();
             } catch (error) {
                 console.error('Manual trade error:', error);
             }

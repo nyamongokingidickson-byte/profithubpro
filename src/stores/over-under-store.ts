@@ -98,7 +98,7 @@ export default class OverUnderStore {
     }
 
     @action
-    private subscribeToTicks() {
+    private async subscribeToTicks() {
         if (!this.isApiReady()) {
             // API not ready yet — wait and retry
             setTimeout(() => this.subscribeToTicks(), 2000);
@@ -107,35 +107,33 @@ export default class OverUnderStore {
 
         // Unsubscribe from previous if exists
         if (this._tick_sub) {
-            this._tick_sub.unsubscribe();
+            try { this._tick_sub.unsubscribe(); } catch(e) { /* ignore */ }
             this._tick_sub = null;
         }
 
-        const doSubscribe = () => {
+        const doSubscribe = async () => {
             if (!api_base.api) return;
 
-            this._tick_sub = api_base.api.onMessage().subscribe((msg: any) => {
-                // Handle wrapped messages from new API mode
-                const data = msg?.data || msg;
-                
-                if (data.error) {
-                    if (data.error.code === 'AlreadySubscribed') return;
-                    console.error('[OverUnderStore] Error:', data.error.message);
+            // Start real-time stream via centralized subscription manager
+            const subscribeCallback = (data: any) => {
+                const transformed = data; // api_base already transforms
+                if (transformed?.error) {
+                    if (transformed.error.code === 'AlreadySubscribed') return;
+                    console.error('[OverUnderStore] Error:', transformed.error.message);
                     return;
                 }
 
-                if (data.msg_type === 'tick') {
-                    const transformed = transformResponse(data, 'tick');
+                if (transformed.msg_type === 'tick') {
                     if (transformed?.tick?.symbol === this.symbol) {
                         const tick = transformed.tick;
                         const quote = tick.quote.toString();
                         const digit = parseInt(quote.slice(-1));
-                        
+
                         runInAction(() => {
                             this.current_price = tick.quote.toFixed(tick.pip_size || 2);
                             this.recent_digits = [...this.recent_digits, digit].slice(-100);
                             this.confirmed_ticks++;
-                            
+
                             if (this.phase === 2) {
                                 this.phase2_ticks++;
                                 if (this.phase2_ticks >= 20) {
@@ -151,21 +149,24 @@ export default class OverUnderStore {
                     }
                 }
 
-                if (data.msg_type === 'history' && data.echo_req?.ticks_history === this.symbol) {
-                    const digits = (data.history?.prices || []).map((p: any) => parseInt(p.toString().slice(-1)));
-                    const lastPrice = data.history?.prices?.[data.history.prices.length - 1];
+                if (transformed.msg_type === 'history' && transformed.echo_req?.ticks_history === this.symbol) {
+                    const digits = (transformed.history?.prices || []).map((p: any) => parseInt(p.toString().slice(-1)));
+                    const lastPrice = transformed.history?.prices?.[transformed.history.prices.length - 1];
                     runInAction(() => {
                         this.recent_digits = digits;
                         if (lastPrice != null) this.current_price = lastPrice.toFixed(4);
                     });
                 }
-            });
+            };
 
-            // Start real-time stream
-            const ticksReq = transformRequest({ ticks: this.symbol, subscribe: 1 }, 'ticks');
-            api_base.api.send(ticksReq).catch((e: any) =>
-                console.warn('[OverUnderStore] ticks subscribe error:', e)
-            );
+            try {
+                const subId = await api_base.subscribeTo({ ticks: this.symbol }, subscribeCallback as any);
+                if (subId) {
+                    this._tick_sub = { unsubscribe: () => api_base.unsubscribeById(subId) };
+                }
+            } catch (e) {
+                console.warn('[OverUnderStore] ticks subscribe error:', e);
+            }
 
             // Initial historical data
             const ticksHistoryReq = transformRequest({

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { observer } from 'mobx-react-lite';
-import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
+import { getAppId, getSocketURL, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
 
 interface Account {
     [key: string]: string;
@@ -96,8 +96,10 @@ const CopyTrading = observer(() => {
         setConnectionStatus('connecting');
 
         const APP_ID = String(getAppId?.() ?? localStorage.getItem('APP_ID') ?? '113536');
-        const server = getSocketURL?.() || 'ws.derivws.com';
-        const wsUrl = `wss://${server}/websockets/v3?app_id=${APP_ID}`;
+        const server = getSocketURL?.() || '';
+        const wsUrl = server.startsWith('wss://') || server.startsWith('ws://')
+            ? server
+            : getPublicWebSocketURL(Number(APP_ID));
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;

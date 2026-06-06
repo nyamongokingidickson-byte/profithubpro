@@ -1,4 +1,5 @@
-import { getAppId, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
+import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
+import { getValidatedWebSocketURL } from '@/services/deriv-url';
 
 type TCallback = (data: any) => void;
 
@@ -8,13 +9,17 @@ class DerivWebSocket {
     private listeners: Map<string, Set<TCallback>> = new Map();
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 10;
+    private reconnectTimer: any = null;
 
     constructor(appId?: string) {
         this.appId = appId || getAppId().toString();
     }
 
     private getEndpoint(): string {
-        return getPublicWebSocketURL(Number(this.appId));
+        const serverUrl = getSocketURL();
+        const validated = getValidatedWebSocketURL(Number(this.appId), serverUrl);
+        console.info(`[DerivWebSocket] Final WebSocket URL: ${validated}`);
+        return validated;
     }
 
     public connect(): Promise<void> {
@@ -66,7 +71,11 @@ class DerivWebSocket {
             this.reconnectAttempts++;
             const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
             console.log(`[DerivWebSocket] Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts})`);
-            setTimeout(() => this.connect(), delay);
+            if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.connect().catch(() => null);
+            }, delay);
         }
     }
 
@@ -76,9 +85,12 @@ class DerivWebSocket {
             this.ws.onopen = null;
             this.ws.onerror = null;
             this.ws.onmessage = null;
-
             if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
                 this.ws.close();
+            }
+            if (this.reconnectTimer) {
+                clearTimeout(this.reconnectTimer);
+                this.reconnectTimer = null;
             }
             this.ws = null;
         }

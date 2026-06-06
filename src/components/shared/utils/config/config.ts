@@ -1,11 +1,13 @@
 import { createCodeChallenge, createCodeVerifier, createState, storePKCEState, clearPKCEVerifier } from '@/utils/pkce';
 import { isStaging } from '../url/helpers';
 
-export const DERIV_NEW_AUTH_URL = 'https://auth.deriv.com/oauth2/auth';
-export const DERIV_NEW_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
-export const DERIV_API_REST_BASE = 'https://api.derivws.com';
-export const DERIV_OAUTH_URL = 'https://oauth.deriv.com/oauth2/authorize';
-export const DERIV_OAUTH_TOKEN_URL = 'https://oauth.deriv.com/oauth2/token';
+export const DERIV_API_REST_BASE = process.env.DERIV_API_REST_BASE || 'https://api.derivws.com/trading/v1/options';
+export const DERIV_OAUTH_URL = process.env.DERIV_OAUTH_URL || 'https://oauth.deriv.com/oauth2/authorize';
+export const DERIV_OAUTH_TOKEN_URL = process.env.DERIV_TOKEN_URL || 'https://oauth.deriv.com/oauth2/token';
+export const DERIV_OAUTH_REVOKE_URL = process.env.DERIV_OAUTH_REVOKE_URL || 'https://oauth.deriv.com/oauth2/revoke';
+export const DERIV_WS_PUBLIC_URL = process.env.DERIV_WS_PUBLIC_URL || 'wss://api.derivws.com/trading/v1/options/ws/public';
+export const DERIV_NEW_AUTH_URL = DERIV_OAUTH_URL;
+export const DERIV_NEW_TOKEN_URL = DERIV_OAUTH_TOKEN_URL;
 
 export const APP_IDS = {
     LOCALHOST: 36300,
@@ -76,14 +78,13 @@ const getDefaultServerURL = () => {
 };
 
 export const getDefaultAppIdAndUrl = () => {
-    const server_url = getDefaultServerURL();
+    const current_domain = getCurrentProductionDomain() ?? '';
+    const app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
+    const server_url = getPublicWebSocketURL(app_id);
 
     if (isTestLink()) {
         return { app_id: APP_IDS.LOCALHOST, server_url };
     }
-
-    const current_domain = getCurrentProductionDomain() ?? '';
-    const app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
 
     return { app_id, server_url };
 };
@@ -119,15 +120,18 @@ export const getAppId = () => {
 
 export const getSocketURL = () => {
     const local_storage_server_url = window.localStorage.getItem('config.server_url');
-    if (local_storage_server_url) return local_storage_server_url;
+    if (local_storage_server_url) {
+        if (local_storage_server_url.startsWith('wss://')) {
+            return local_storage_server_url;
+        }
+        return `wss://${local_storage_server_url}/trading/v1/options/ws/public?app_id=${getAppId()}`;
+    }
 
-    const server_url = getDefaultServerURL();
-
-    return server_url;
+    return getPublicWebSocketURL(getAppId());
 };
 
 export const getPublicWebSocketURL = (appId: number) => {
-    return `wss://api.derivws.com/trading/v1/options/ws/public?app_id=${appId}`;
+    return `${DERIV_WS_PUBLIC_URL}?app_id=${appId}`;
 };
 
 export const getDemoWebSocketURL = (appId: number) => {
@@ -234,7 +238,7 @@ export const generateOAuthURL = async (prompt?: string) => {
         params.set('prompt', prompt);
     }
 
-    const oauthUrl = `${DERIV_NEW_AUTH_URL}?${params.toString()}`;
+    const oauthUrl = `${DERIV_OAUTH_URL}?${params.toString()}`;
 
     console.log('🔐 [Frontend] Full OAuth URL:', oauthUrl.substring(0, 100) + '...');
 

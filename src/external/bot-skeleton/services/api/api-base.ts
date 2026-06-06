@@ -60,17 +60,30 @@ class APIBase {
     active_symbols_promise: Promise<void> | null = null;
     common_store: CommonStore | undefined;
     landing_company: string | null = null;
+    // Subscription manager: canonicalKey -> { payload, subscriptionId, callbacks, lastMessageTime }
+    activeSubscriptions: Map<
+        string,
+        {
+            payload: Record<string, any>;
+            subscriptionId?: string;
+            callbacks: Set<(data: any) => void>;
+            lastMessageTime?: number;
+        }
+    > = new Map();
+    private messageSubscription: { unsubscribe: () => void } | null = null;
 
     unsubscribeAllSubscriptions = () => {
-        this.current_auth_subscriptions?.forEach(subscription_promise => {
-            subscription_promise.then(({ subscription }) => {
-                if (subscription?.id) {
-                    this.api?.send({
-                        forget: subscription.id,
-                    });
+        // Forget all tracked subscriptions
+        for (const [, entry] of this.activeSubscriptions.entries()) {
+            if (entry.subscriptionId && this.api && this.api.connection?.readyState === 1) {
+                try {
+                    this.api.send({ forget: entry.subscriptionId });
+                } catch (e) {
+                    console.error('unsubscribeAll failed for', entry.subscriptionId, e);
                 }
-            });
-        });
+            }
+        }
+        this.activeSubscriptions.clear();
         this.current_auth_subscriptions = [];
     };
 
@@ -186,6 +199,50 @@ class APIBase {
             this.api = wrapped_api as any;
             this.api?.connection.addEventListener('open', this.onsocketopen.bind(this));
             this.api?.connection.addEventListener('close', this.onsocketclose.bind(this));
+
+            // Setup a central onMessage router to dispatch to activeSubscriptions callbacks
+            try {
+                if (this.messageSubscription && typeof this.messageSubscription.unsubscribe === 'function') {
+                    this.messageSubscription.unsubscribe();
+                }
+                this.messageSubscription = this.api.onMessage().subscribe((msg: any) => {
+                    const data = msg?.data ?? msg;
+                    const reqId = data.req_id || data.subscription?.id || data.echo_req?.req_id;
+
+                    // route to matching subscription by subscriptionId
+                    if (reqId) {
+                        for (const [, entry] of this.activeSubscriptions.entries()) {
+                            if (entry.subscriptionId === reqId) {
+                                entry.lastMessageTime = Date.now();
+                                try {
+                                    const transformed = transformResponse(data, data.msg_type);
+                                    for (const cb of entry.callbacks) cb(transformed);
+                                } catch (e) {
+                                    console.error('subscription callback error', e);
+                                }
+                            }
+                        }
+                    }
+
+                    // fallback: route by symbol/msg_type heuristics
+                    const msgType = data.msg_type || '';
+                    for (const [key, entry] of this.activeSubscriptions.entries()) {
+                        const payload = entry.payload || {};
+                        const symbol = payload.symbol || payload.ticks || null;
+                        if (symbol && typeof symbol === 'string' && JSON.stringify(data).includes(symbol)) {
+                            entry.lastMessageTime = Date.now();
+                            const transformed = transformResponse(data, msgType);
+                            for (const cb of entry.callbacks) cb(transformed);
+                        } else if (msgType && key.includes(msgType)) {
+                            entry.lastMessageTime = Date.now();
+                            const transformed = transformResponse(data, msgType);
+                            for (const cb of entry.callbacks) cb(transformed);
+                        }
+                    }
+                });
+            } catch (e) {
+                console.warn('Failed to attach central onMessage router', e);
+            }
         }
 
         if (!this.has_active_symbols && !V2GetActiveToken()) {
@@ -321,6 +378,74 @@ class APIBase {
         await Promise.all(streamsToSubscribe.map(subscribeToStream));
     }
 
+    // New subscribe helper that deduplicates subscriptions and routes callbacks
+    async subscribeTo(payload: Record<string, any>, cb: (data: any) => void) {
+        if (!this.api) throw new Error('API not initialized');
+
+        const canonical = { ...payload };
+        delete canonical.req_id;
+        delete canonical.subscribe;
+        const key = JSON.stringify(canonical);
+
+        let entry = this.activeSubscriptions.get(key);
+        if (!entry) {
+            entry = { payload: canonical, callbacks: new Set() };
+            this.activeSubscriptions.set(key, entry);
+        }
+
+        entry.callbacks.add(cb);
+
+        if (entry.subscriptionId) {
+            return entry.subscriptionId;
+        }
+
+        try {
+            const msgType = Object.keys(canonical).find(k => k !== 'req_id') || '';
+            const transformed = msgType ? transformRequest(canonical, msgType) : canonical;
+            const message = { ...transformed, subscribe: 1 };
+            const response = await this.api.send(message as any);
+
+            const subId = response?.subscription?.id || response?.tick?.id || response?.subscriptionId || null;
+            if (subId) {
+                entry.subscriptionId = subId;
+                console.info('[APIBase] Subscribed', { key, subId, payload: entry.payload });
+                return subId;
+            }
+            return null;
+        } catch (e) {
+            console.error('subscribeTo error', e, payload);
+            throw e;
+        }
+    }
+
+    async unsubscribeById(subscriptionId: string) {
+        if (!subscriptionId) return;
+        // remove from activeSubscriptions
+        for (const [key, entry] of this.activeSubscriptions.entries()) {
+            if (entry.subscriptionId === subscriptionId) {
+                entry.callbacks.clear();
+                entry.subscriptionId = undefined;
+                try {
+                    if (this.api && this.api.connection?.readyState === 1) {
+                        this.api.send({ forget: subscriptionId });
+                    }
+                } catch (e) {
+                    console.error('unsubscribeById send error', e);
+                }
+                this.activeSubscriptions.delete(key);
+                return;
+            }
+        }
+        // fallback: send forget anyway
+        try {
+            if (this.api && this.api.connection?.readyState === 1) {
+                this.api.send({ forget: subscriptionId });
+            }
+        } catch (e) {
+            console.error('unsubscribeById fallback send error', e);
+        }
+    }
+
     getActiveSymbols = async () => {
         await doUntilDone(() => this.api?.send({ active_symbols: 'brief' }), [], this).then(
             ({ active_symbols = [], error = {} }) => {
@@ -361,6 +486,27 @@ class APIBase {
         global_timeouts.forEach((_: unknown, i: number) => {
             clearTimeout(i);
         });
+    }
+
+    // Diagnostics helper: return active subscription metadata
+    getSubscriptionDiagnostics() {
+        const out: Array<{
+            key: string;
+            subscriptionId?: string;
+            lastMessageTime?: number;
+            payload: Record<string, any>;
+            callbackCount: number;
+        }> = [];
+        for (const [key, entry] of this.activeSubscriptions.entries()) {
+            out.push({
+                key,
+                subscriptionId: entry.subscriptionId,
+                lastMessageTime: entry.lastMessageTime,
+                payload: entry.payload,
+                callbackCount: entry.callbacks.size,
+            });
+        }
+        return out;
     }
 }
 

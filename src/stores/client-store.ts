@@ -48,20 +48,35 @@ export default class ClientStore {
         }
 
         console.log('[ClientStore] Subscribing to balance updates');
-        this.balanceSubscription = api_base.api.onMessage().subscribe(({ data }: any) => {
+        let subId: string | null = null;
+        let cancelled = false;
+
+        const cb = (data: any) => {
             if (data?.msg_type === 'balance') {
                 console.log('[ClientStore] Balance update received:', data.balance);
                 this.setBalance(data.balance.balance);
                 this.setCurrency(data.balance.currency);
                 this.setAllAccountsBalance(data.balance.accounts);
             }
-        });
+        };
+
+        (async () => {
+            try {
+                subId = await api_base.subscribeTo({ balance: 1, account: 'all' }, cb as any);
+                if (cancelled && subId) await api_base.unsubscribeById(subId);
+                if (subId) {
+                    this.balanceSubscription = { unsubscribe: () => api_base.unsubscribeById(subId) };
+                }
+            } catch (e) {
+                console.warn('[ClientStore] subscribeToBalance error', e);
+            }
+        })();
     };
 
     unsubscribeBalance = () => {
         if (this.balanceSubscription) {
             console.log('[ClientStore] Unsubscribing from balance updates');
-            this.balanceSubscription.unsubscribe();
+            try { this.balanceSubscription.unsubscribe(); } catch (e) { /* ignore */ }
             this.balanceSubscription = null;
         }
     };

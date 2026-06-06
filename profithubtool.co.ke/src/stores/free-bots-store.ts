@@ -148,11 +148,10 @@ export default class FreeBotsStore {
     @action
     fetchMarkets = async () => {
         try {
-            if (!api_base.api) return;
-            const res = await api_base.api.send({ active_symbols: 'brief', product_type: 'basic' });
-            if (res?.active_symbols?.length) {
+            const res = await api_base.getActiveSymbols();
+            if (Array.isArray(res) && res.length) {
                 const groups: Record<string, { group: string; items: { value: string; label: string }[] }> = {};
-                res.active_symbols.forEach((s: any) => {
+                res.forEach((s: any) => {
                     if (s.is_trading_suspended) return;
                     const g = s.market_display_name || s.market || 'Other';
                     if (!groups[g]) groups[g] = { group: g, items: [] };

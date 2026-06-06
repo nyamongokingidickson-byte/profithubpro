@@ -482,8 +482,10 @@ export default class AnalysisStore {
             // Setup real-time listener (dispose previous one first)
             if (this.unsubscribe_ticks) this.unsubscribe_ticks();
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const subscription = api_base.api.onMessage().subscribe((msg: any) => {
+            let subId: string | null = null;
+            let cancelled = false;
+
+            const cb = (msg: any) => {
                 const data = msg.data || msg;
                 if (data.msg_type === 'tick') {
                     const transformed = transformResponse(data, 'tick');
@@ -491,10 +493,18 @@ export default class AnalysisStore {
                         this.handleTick(transformed.tick);
                     }
                 }
-            });
+            };
 
-            this.unsubscribe_ticks = () => subscription.unsubscribe();
-            console.log(`[AnalysisStore] Subscribed to ${this.symbol} (Depth: ${safeCount})`);
+            (async () => {
+                try {
+                    subId = await api_base.subscribeTo({ ticks: this.symbol }, cb as any);
+                    if (cancelled && subId) await api_base.unsubscribeById(subId);
+                    if (subId) this.unsubscribe_ticks = () => api_base.unsubscribeById(subId);
+                    console.log(`[AnalysisStore] Subscribed to ${this.symbol} (Depth: ${safeCount})`);
+                } catch (e) {
+                    console.warn('[AnalysisStore] subscribeTo error', e);
+                }
+            })();
         } catch (e: unknown) {
             console.error('[AnalysisStore] Subscribe error:', e);
             runInAction(() => {

@@ -1,10 +1,11 @@
 import { isStaging } from '../url/helpers';
 
-export const DERIV_NEW_AUTH_URL = 'https://auth.deriv.com/oauth2/auth';
-export const DERIV_NEW_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
 export const DERIV_API_REST_BASE = 'https://api.derivws.com';
 export const DERIV_OAUTH_URL = 'https://oauth.deriv.com/oauth2/authorize';
 export const DERIV_OAUTH_TOKEN_URL = 'https://oauth.deriv.com/oauth2/token';
+export const DERIV_OAUTH_REVOKE_URL = 'https://oauth.deriv.com/oauth2/revoke';
+export const DERIV_NEW_AUTH_URL = DERIV_OAUTH_URL;
+export const DERIV_NEW_TOKEN_URL = DERIV_OAUTH_TOKEN_URL;
 export const API_MODE: 'legacy' | 'new' = 'new';
 
 export const APP_IDS = {
@@ -59,14 +60,13 @@ const getDefaultServerURL = () => {
 };
 
 export const getDefaultAppIdAndUrl = () => {
-    const server_url = getDefaultServerURL();
+    const current_domain = getCurrentProductionDomain() ?? '';
+    const app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
+    const server_url = getPublicWebSocketURL(Number(app_id));
 
     if (isTestLink()) {
         return { app_id: APP_IDS.LOCALHOST, server_url };
     }
-
-    const current_domain = getCurrentProductionDomain() ?? '';
-    const app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
 
     return { app_id, server_url };
 };
@@ -107,11 +107,14 @@ export const getAppId = () => {
 
 export const getSocketURL = () => {
     const local_storage_server_url = window.localStorage.getItem('config.server_url');
-    if (local_storage_server_url) return local_storage_server_url;
+    if (local_storage_server_url) {
+        if (local_storage_server_url.startsWith('wss://')) {
+            return local_storage_server_url;
+        }
+        return `wss://${local_storage_server_url}/trading/v1/options/ws/public?app_id=${getAppId()}`;
+    }
 
-    const server_url = getDefaultServerURL();
-
-    return server_url;
+    return getPublicWebSocketURL(Number(getAppId()));
 };
 
 export const getPublicWebSocketURL = (appId: number) => {

@@ -1,5 +1,6 @@
 import { getAppId, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
 import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 
 export enum ConnectionState {
     DISCONNECTED = 'DISCONNECTED',
@@ -246,7 +247,36 @@ class DerivApiService {
         const transformedRequest = transformRequest(request as any, msgType);
         const subscriptionKey = this.getSubscriptionKey(transformedRequest);
 
-        // Tracking the subscription even if disconnected
+        // If api_base is available, delegate to centralized subscription manager
+        if (api_base && typeof api_base.subscribeTo === 'function') {
+            let subId: string | null = null;
+            let cancelled = false;
+
+            (async () => {
+                try {
+                    subId = await api_base.subscribeTo(transformedRequest as Record<string, any>, (data: any) => {
+                        callback(data as TDerivResponse);
+                    });
+                    // track locally for restore logic
+                    this.subscriptions.set(subscriptionKey, { request: transformedRequest, callback });
+                    if (cancelled && subId) {
+                        await api_base.unsubscribeById(subId);
+                    }
+                } catch (e) {
+                    console.error('[DerivApiService] delegate subscribe failed', e);
+                }
+            })();
+
+            return () => {
+                cancelled = true;
+                if (subId && api_base && typeof api_base.unsubscribeById === 'function') {
+                    api_base.unsubscribeById(subId).catch(() => null);
+                }
+                this.subscriptions.delete(subscriptionKey);
+            };
+        }
+
+        // Tracking the subscription even if disconnected (fallback)
         this.subscriptions.set(subscriptionKey, { request: transformedRequest, callback });
 
         // If connected, send the request immediately

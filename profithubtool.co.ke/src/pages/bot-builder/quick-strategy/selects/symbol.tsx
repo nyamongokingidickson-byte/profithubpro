@@ -54,20 +54,39 @@ const SymbolSelect: React.FC = () => {
     );
 
     useEffect(() => {
-        const { active_symbols } =
-            (ApiHelpers?.instance as unknown as {
+        const loadSymbols = async () => {
+            const active_symbols = (ApiHelpers?.instance as unknown as {
                 active_symbols: {
                     getSymbolsForBot: () => TSymbol[];
+                    retrieveActiveSymbols: (is_forced_update?: boolean) => Promise<any>;
                 };
-            }) ?? {};
-        const symbols = active_symbols?.getSymbolsForBot?.();
-        setActiveSymbols(symbols);
+            })?.active_symbols;
 
-        const has_symbol = !!symbols?.find(symbol => symbol?.value === values?.symbol);
-        if (!has_symbol) {
-            setFieldValue('symbol', symbols?.[0]?.value);
-            setValue('symbol', symbols?.[0]?.value);
-        }
+            if (!active_symbols) {
+                console.warn('[QuickStrategy] Active symbols helper is unavailable');
+                return;
+            }
+
+            let symbols = active_symbols.getSymbolsForBot?.() ?? [];
+            if (!symbols.length && typeof active_symbols.retrieveActiveSymbols === 'function') {
+                try {
+                    await active_symbols.retrieveActiveSymbols(true);
+                    symbols = active_symbols.getSymbolsForBot?.() ?? [];
+                } catch (error) {
+                    console.error('[QuickStrategy] Failed to retrieve active symbols:', error);
+                }
+            }
+
+            setActiveSymbols(symbols);
+
+            const has_symbol = !!symbols?.find(symbol => symbol?.value === values?.symbol);
+            if (!has_symbol && symbols?.[0]) {
+                setFieldValue('symbol', symbols[0].value);
+                setValue('symbol', symbols[0].value);
+            }
+        };
+
+        loadSymbols();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 

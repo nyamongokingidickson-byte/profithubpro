@@ -14,22 +14,27 @@ export const useActiveSymbols = () => {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        setIsLoading(true);
-        setError(null);
+        const loadActiveSymbols = async () => {
+            setIsLoading(true);
+            setError(null);
 
-        derivApiService
-            .sendRequest({ active_symbols: 'brief', product_type: 'basic' })
-            .then(data => {
+            try {
+                if (derivApiService.getState() === 'DISCONNECTED') {
+                    await derivApiService.connect();
+                }
+
+                const data = await derivApiService.sendRequest({ active_symbols: 'brief', product_type: 'basic' });
                 if (data.active_symbols) {
                     setSymbols(data.active_symbols);
                 }
-            })
-            .catch(err => {
-                setError(err.message || 'Failed to fetch active symbols');
-            })
-            .finally(() => {
+            } catch (err: any) {
+                setError(err?.message || 'Failed to fetch active symbols');
+            } finally {
                 setIsLoading(false);
-            });
+            }
+        };
+
+        loadActiveSymbols();
     }, []);
 
     return { symbols, isLoading, error };

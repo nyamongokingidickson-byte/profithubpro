@@ -1,7 +1,7 @@
 import { parse } from 'cookie';
 import { NextApiRequest, NextApiResponse } from 'next';
 
-const LEGACY_APP_ID = process.env.LEGACY_APP_ID || '113536';
+const APP_ID = process.env.APP_ID || process.env.LEGACY_APP_ID || '113536';
 
 function getAccessTokenFromRequest(req: NextApiRequest): string | null {
     const authorization = req.headers.authorization;
@@ -33,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${accessToken}`,
-                'Deriv-App-ID': LEGACY_APP_ID,
+                'Deriv-App-ID': APP_ID,
             },
         });
 

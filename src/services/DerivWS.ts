@@ -1,6 +1,7 @@
 import DerivAuth from './DerivAuth';
 import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
 import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
+import { getValidatedWebSocketURL } from '@/services/deriv-url';
 
 export type MessageHandler = (data: any) => void;
 class DerivWS {
@@ -11,6 +12,17 @@ class DerivWS {
     private responseHandlers = new Map<string, (data: any) => void>();
     private requestCounter = 0;
     private subIndex = 0;
+    // Subscription manager: canonicalKey -> { payload, reqId, callbacks, subscribed, lastMessageTime }
+    private activeSubscriptions: Map<
+        string,
+        {
+            payload: Record<string, any>;
+            reqId?: string;
+            callbacks: Set<MessageHandler>;
+            subscribed: boolean;
+            lastMessageTime?: number;
+        }
+    > = new Map();
     private visibilityTimeout: any = null;
     private openingPromise: Promise<void> | null = null;
 
@@ -28,7 +40,9 @@ class DerivWS {
     private getUrl() {
         const appId = getAppId();
         const serverUrl = getSocketURL();
-        return `wss://${serverUrl}/websockets/v3?app_id=${appId}`;
+        const validated = getValidatedWebSocketURL(appId, serverUrl);
+        console.info('[DerivWS] Using WebSocket URL:', validated);
+        return validated;
     }
 
     get isConnected() {
@@ -58,6 +72,17 @@ class DerivWS {
                 const t = token;
                 if (t && this.ws) {
                     this.ws.send(JSON.stringify({ authorize: t }));
+                }
+                // Auto-resubscribe any previous subscriptions
+                try {
+                    for (const [key, sub] of this.activeSubscriptions.entries()) {
+                        sub.subscribed = false; // reset so subscribe will send again
+                        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                            this.sendSubscriptionForKey(key).catch(() => null);
+                        }
+                    }
+                } catch (e) {
+                    console.error('DerivWS resubscribe error', e);
                 }
                 resolve();
             };
@@ -104,28 +129,122 @@ class DerivWS {
     }
 
     subscribe(payload: Record<string, any>, cb: MessageHandler) {
-        const id = `sub_${Date.now()}_${this.subIndex++}`;
-        this.handlers.set(id, (data) => {
-            const transformedData = transformResponse(data, data.msg_type);
-            cb(transformedData);
-        });
-        const msgType = Object.keys(payload).find(k => k !== 'req_id' && k !== 'subscribe') || '';
-        const transformed = transformRequest(payload, msgType);
-        const message = { ...transformed, subscribe: 1, req_id: id };
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(message));
-        } else {
-            this.connect(this.loginId).then(() => {
-                if (this.ws) this.ws.send(JSON.stringify(message));
-            }).catch(() => null);
+        // Create a canonical key for the payload to dedupe subscriptions
+        const canonicalPayload = { ...payload };
+        delete canonicalPayload.req_id;
+        delete canonicalPayload.subscribe;
+        const key = JSON.stringify(canonicalPayload);
+
+        let entry = this.activeSubscriptions.get(key);
+        if (!entry) {
+            entry = {
+                payload: canonicalPayload,
+                callbacks: new Set<MessageHandler>(),
+                subscribed: false,
+            };
+            this.activeSubscriptions.set(key, entry);
         }
-        return id;
+
+        entry.callbacks.add(cb);
+
+        // If already subscribed, return existing reqId
+        if (entry.reqId && entry.subscribed) {
+            return entry.reqId;
+        }
+
+        // Ensure connection, then send subscription
+        this.connect(this.loginId)
+            .then(() => this.sendSubscriptionForKey(key))
+            .catch((e) => console.error('subscribe connect error', e));
+
+        return entry.reqId ?? `pending_${Date.now()}_${this.subIndex++}`;
+    }
+
+    private async sendSubscriptionForKey(key: string) {
+        const entry = this.activeSubscriptions.get(key);
+        if (!entry) return;
+        if (entry.subscribed) return;
+        
+
+        const reqId = `sub_${Date.now()}_${++this.subIndex}`;
+        entry.reqId = reqId;
+
+        // set handler for incoming subscription messages
+        this.handlers.set(reqId, (data) => {
+            try {
+                entry!.lastMessageTime = Date.now();
+                const transformedData = transformResponse(data, data.msg_type);
+                for (const cb of entry!.callbacks) cb(transformedData);
+            } catch (e) {
+                console.error('subscription handler error', e);
+            }
+        });
+
+        const msgType = Object.keys(entry.payload).find(k => k !== 'req_id') || '';
+        const transformed = transformRequest(entry.payload, msgType);
+        const message = { ...transformed, subscribe: 1, req_id: reqId };
+
+        try {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify(message));
+                entry.subscribed = true;
+                console.info('[DerivWS] Subscribed', { key, reqId, payload: entry.payload });
+            } else {
+                // If not open, queue via this.connect flow — connect() will trigger resend
+                entry.subscribed = false;
+            }
+        } catch (e) {
+            console.error('[DerivWS] sendSubscription failed', e);
+        }
+    }
+
+    // Diagnostics: list active subscriptions with basic metadata
+    public getSubscriptionDiagnostics() {
+        const diagnostics: Array<{
+            key: string;
+            reqId?: string;
+            subscribed: boolean;
+            lastMessageTime?: number;
+            payload: Record<string, any>;
+        }> = [];
+        for (const [key, entry] of this.activeSubscriptions.entries()) {
+            diagnostics.push({
+                key,
+                reqId: entry.reqId,
+                subscribed: entry.subscribed,
+                lastMessageTime: entry.lastMessageTime,
+                payload: entry.payload,
+            });
+        }
+        return diagnostics;
+    }
+
+    public getConnectionState() {
+        return this.ws?.readyState ?? -1;
     }
 
     unsubscribe(subId: string) {
+        // remove from handlers map
         this.handlers.delete(subId);
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ forget: subId }));
+
+        // find subscription entry by reqId
+        for (const [key, entry] of this.activeSubscriptions.entries()) {
+            if (entry.reqId === subId) {
+                // remove all callbacks
+                entry.callbacks.clear();
+                entry.subscribed = false;
+                entry.reqId = undefined;
+                // tell server to forget
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    try {
+                        this.ws.send(JSON.stringify({ forget: subId }));
+                    } catch (e) {
+                        console.error('unsubscribe send error', e);
+                    }
+                }
+                this.activeSubscriptions.delete(key);
+                return;
+            }
         }
     }
 
@@ -142,6 +261,28 @@ class DerivWS {
                 cb(data);
                 return;
             }
+
+            // try matching by subscription keys: some messages may not include req_id
+            // update lastMessageTime for matching activeSubscriptions by symbol/msg_type
+            const msgType = data.msg_type || '';
+            for (const [key, entry] of this.activeSubscriptions.entries()) {
+                // basic heuristic: if payload has symbol and data contains that symbol, route
+                const payload = entry.payload || {};
+                const symbol = payload.symbol || payload.ticks || payload.active_symbols || payload.contract_id || null;
+                if (symbol && typeof symbol === 'string') {
+                    if (data.msg_type && JSON.stringify(data).includes(symbol)) {
+                        entry.lastMessageTime = Date.now();
+                        const transformedData = transformResponse(data, msgType);
+                        for (const cb of entry.callbacks) cb(transformedData);
+                    }
+                } else if (msgType && key.includes(msgType)) {
+                    entry.lastMessageTime = Date.now();
+                    const transformedData = transformResponse(data, msgType);
+                    for (const cb of entry.callbacks) cb(transformedData);
+                }
+            }
+
+            // fallback: broadcast to any non-reqId handlers
             for (const cb of this.handlers.values()) cb(data);
         } catch (e) {
             console.error('DerivWS.handleMessage parse error', e, raw);

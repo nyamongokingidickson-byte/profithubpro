@@ -49,6 +49,8 @@ export const useDeriv = (initialSymbol = 'R_100', maxTicks = 100) => {
         }
     }, []);
 
+    const hasRequestedActiveSymbols = useRef(false);
+
     const connect = useCallback(async () => {
         if (!wsRef.current) {
             wsRef.current = new DerivWebSocket();
@@ -69,7 +71,10 @@ export const useDeriv = (initialSymbol = 'R_100', maxTicks = 100) => {
             addLog('Connected to Deriv WebSocket');
 
             wsRef.current.subscribeTicks(symbol);
-            wsRef.current.send({ active_symbols: 'brief', product_type: 'basic' });
+            if (!hasRequestedActiveSymbols.current) {
+                wsRef.current.send({ active_symbols: 'brief', product_type: 'basic' });
+                hasRequestedActiveSymbols.current = true;
+            }
         } catch (error) {
             setConnectionStatus('disconnected');
             addLog(`Connection error: ${error}`);

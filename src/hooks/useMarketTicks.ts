@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import derivApiService from '@/lib/deriv-api-service';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import {
     transformTicksHistoryRequest,
-    transformTicksRequest,
-    transformTicksResponse,
 } from '@/utils/api-migration-adapter';
 
 export type TTick = {
@@ -43,20 +41,21 @@ export const useMarketTicks = (symbol: string, options: TMarketTicksOptions = {}
             style: 'ticks',
         });
 
-        derivApiService.send(historyRequest);
+        // Use centralized api_base for history fetch
+        try {
+            api_base.api?.send(historyRequest as any);
+        } catch (e) {
+            console.warn('[useMarketTicks] history request failed', e);
+        }
 
         // 2. Subscribe if requested
         let unsubscribe: (() => void) | null = null;
 
         if (subscribe) {
-            const ticksRequest = transformTicksRequest({
-                ticks: symbol,
-                subscribe: 1,
-            });
-
-            unsubscribe = derivApiService.subscribe(ticksRequest, data => {
-                const transformedData = transformTicksResponse(data);
-
+            // Subscribe via centralized subscription manager
+            let subId: string | null = null;
+            let cancelled = false;
+            const cb = (transformedData: any) => {
                 if (transformedData.msg_type === 'tick' && transformedData.tick) {
                     if (transformedData.tick.symbol === symbolRef.current) {
                         const newTick = {
@@ -83,7 +82,21 @@ export const useMarketTicks = (symbol: string, options: TMarketTicksOptions = {}
                 } else if (transformedData.error && transformedData.echo_req?.ticks === symbolRef.current) {
                     setError(transformedData.error.message);
                 }
-            });
+            };
+
+            (async () => {
+                try {
+                    subId = await api_base.subscribeTo({ ticks: symbol }, cb as any);
+                    if (cancelled && subId) await api_base.unsubscribeById(subId);
+                } catch (e) {
+                    console.warn('[useMarketTicks] subscribe error', e);
+                }
+            })();
+
+            unsubscribe = () => {
+                cancelled = true;
+                if (subId) api_base.unsubscribeById(subId).catch(() => null);
+            };
         }
 
         return () => {

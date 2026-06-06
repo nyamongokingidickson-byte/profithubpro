@@ -1,7 +1,7 @@
 import { action, makeObservable, observable, reaction, runInAction } from 'mobx';
 import { ProposalOpenContract } from '@deriv/api-types';
 import RootStore from './root-store';
-import { getAppId } from '@/components/shared';
+import { getAppId, getPublicWebSocketURL } from '@/components/shared';
 import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
 
 export type TCopyAccount = {
@@ -147,7 +147,7 @@ export default class CopyTraderStore {
         }
 
         const app_id = getAppId();
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${app_id}`);
+        const ws = new WebSocket(getPublicWebSocketURL(app_id));
 
         account.ws = ws;
         account.status = 'Pending';
@@ -379,7 +379,7 @@ export default class CopyTraderStore {
         }
 
         const app_id = getAppId();
-        const ws = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${app_id}`);
+        const ws = new WebSocket(getPublicWebSocketURL(app_id));
 
         this.real_account_ws = ws;
 

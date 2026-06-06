@@ -31,16 +31,22 @@ class DerivApiService {
     private minReconnectDelay: number = 2000;
     private reconnectTimeout: NodeJS.Timeout | null = null;
     private pingInterval: NodeJS.Timeout | null = null;
+    private connectionPromise: Promise<void> | null = null;
+    private connectionPromiseResolve: (() => void) | null = null;
+    private connectionPromiseReject: ((error: any) => void) | null = null;
     private subscriptions: Map<string, { request: Record<string, unknown>; callback: TSubscriptionCallback }> =
         new Map();
     private pendingRequests: Map<
         number,
         {
             resolve: (data: TDerivResponse) => void;
-            reject: (error: TDerivResponse['error']) => void;
+            reject: (error: TDerivResponse['error'] | Error) => void;
             timeout: NodeJS.Timeout;
+            request?: Record<string, unknown>;
         }
     > = new Map();
+    private cachedResponses: Map<string, { response: TDerivResponse; timestamp: number }> = new Map();
+    private requestCooldowns: Map<string, number> = new Map();
     private onStateChangeCallbacks: Set<(state: ConnectionState) => void> = new Set();
     private lastReqId: number = 0;
     private latency: number = 0;
@@ -63,14 +69,23 @@ class DerivApiService {
         return DerivApiService.instance;
     }
 
-    public connect(token?: string): void {
-        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-            return;
+    public connect(token?: string): Promise<void> {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            return Promise.resolve();
+        }
+
+        if (this.connectionPromise) {
+            return this.connectionPromise;
         }
 
         this.isManuallyDisconnected = false;
         this.apiToken = token || this.apiToken;
         this.setState(ConnectionState.CONNECTING);
+
+        this.connectionPromise = new Promise((resolve, reject) => {
+            this.connectionPromiseResolve = resolve;
+            this.connectionPromiseReject = reject;
+        });
 
         try {
             this.ws = new WebSocket(this.getEndpoint());
@@ -81,9 +96,18 @@ class DerivApiService {
                 this.reconnectAttempts = 0;
                 this.startPing();
 
+                if (this.connectionPromiseResolve) {
+                    this.connectionPromiseResolve();
+                    this.connectionPromise = null;
+                    this.connectionPromiseResolve = null;
+                    this.connectionPromiseReject = null;
+                }
+
                 if (this.apiToken) {
                     console.log('[DerivApiService] Re-authorizing with stored token...');
-                    this.authorize(this.apiToken);
+                    this.authorize(this.apiToken).catch(error => {
+                        console.error('[DerivApiService] Authorization failed during reconnect', error);
+                    });
                 } else {
                     this.restoreSubscriptions();
                 }
@@ -97,11 +121,23 @@ class DerivApiService {
             this.ws.onerror = error => {
                 console.error('[DerivApiService] WebSocket error:', error);
                 this.setState(ConnectionState.ERROR);
+                if (this.connectionPromiseReject) {
+                    this.connectionPromiseReject(error);
+                    this.connectionPromise = null;
+                    this.connectionPromiseResolve = null;
+                    this.connectionPromiseReject = null;
+                }
             };
 
             this.ws.onclose = () => {
                 console.log('[DerivApiService] WebSocket closed');
                 this.stopPing();
+                if (this.connectionPromiseReject) {
+                    this.connectionPromiseReject(new Error('WebSocket closed before connection completed'));
+                    this.connectionPromise = null;
+                    this.connectionPromiseResolve = null;
+                    this.connectionPromiseReject = null;
+                }
                 if (!this.isManuallyDisconnected) {
                     this.setState(ConnectionState.DISCONNECTED);
                     this.attemptReconnect();
@@ -145,7 +181,45 @@ class DerivApiService {
         }
     }
 
-    public sendRequest(request: Record<string, unknown>, timeoutMs: number = 30000): Promise<TDerivResponse> {
+    private getRequestKey(request: Record<string, unknown>): string {
+        return JSON.stringify(request);
+    }
+
+    private isActiveSymbolsRequest(request: Record<string, unknown>): boolean {
+        return (request as any).active_symbols === 'brief';
+    }
+
+    public async sendRequest(request: Record<string, unknown>, timeoutMs: number = 30000): Promise<TDerivResponse> {
+        const requestKey = this.getRequestKey(request);
+
+        if (this.isActiveSymbolsRequest(request)) {
+            const cache = this.cachedResponses.get(requestKey);
+            const now = Date.now();
+            const cooldownUntil = this.requestCooldowns.get(requestKey) ?? 0;
+
+            if (cache && now - cache.timestamp < 60000) {
+                return Promise.resolve(cache.response);
+            }
+
+            if (cooldownUntil > now) {
+                return Promise.reject(
+                    new Error(
+                        `Rate limit active for active_symbols. Try again in ${Math.ceil(
+                            (cooldownUntil - now) / 1000
+                        )} seconds.`
+                    )
+                );
+            }
+        }
+
+        if (this.state === ConnectionState.DISCONNECTED) {
+            await this.connect();
+        }
+
+        if (this.state === ConnectionState.CONNECTING && this.connectionPromise) {
+            await this.connectionPromise;
+        }
+
         return new Promise((resolve, reject) => {
             const req_id = ++this.lastReqId;
             const msg = { ...request, req_id };
@@ -159,14 +233,14 @@ class DerivApiService {
                 }
             }, timeoutMs);
 
-            this.pendingRequests.set(req_id, { resolve, reject, timeout });
+            this.pendingRequests.set(req_id, { resolve, reject, timeout, request });
 
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify(msg));
             } else {
                 clearTimeout(timeout);
                 this.pendingRequests.delete(req_id);
-                reject(new Error('WebSocket is not open'));
+                reject(new Error('WebSocket is not open after waiting for connection'));
             }
         });
     }
@@ -217,9 +291,25 @@ class DerivApiService {
             if (pending) {
                 clearTimeout(pending.timeout);
                 this.pendingRequests.delete(data.req_id);
+                const requestKey = pending.request ? this.getRequestKey(pending.request) : '';
+
                 if (data.error) {
-                    pending.reject(data.error);
+                    if (data.error.code === 'RateLimit' && pending.request && this.isActiveSymbolsRequest(pending.request)) {
+                        const now = Date.now();
+                        this.requestCooldowns.set(requestKey, now + 2000);
+                        const cached = this.cachedResponses.get(requestKey);
+                        if (cached) {
+                            pending.resolve(cached.response);
+                        } else {
+                            pending.reject(new Error('Rate limit exceeded for active_symbols. Please retry later.'));
+                        }
+                    } else {
+                        pending.reject(data.error);
+                    }
                 } else {
+                    if (pending.request && this.isActiveSymbolsRequest(pending.request)) {
+                        this.cachedResponses.set(requestKey, { response: data, timestamp: Date.now() });
+                    }
                     pending.resolve(data);
                 }
             }

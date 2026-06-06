@@ -28,7 +28,14 @@ export default class ActiveSymbols {
         if (api_base.has_active_symbols) {
             this.active_symbols = api_base?.active_symbols ?? [];
         } else {
-            await api_base.active_symbols_promise;
+            if (!api_base.active_symbols_promise) {
+                api_base.active_symbols_promise = api_base.getActiveSymbols();
+            }
+            try {
+                await api_base.active_symbols_promise;
+            } catch (e) {
+                console.warn('[ActiveSymbols] Failed to fetch active symbols:', e);
+            }
             this.active_symbols = api_base?.active_symbols ?? [];
         }
 

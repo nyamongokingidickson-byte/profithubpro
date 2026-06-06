@@ -563,11 +563,9 @@ export default class AnalysisStore {
     fetchMarkets = async () => {
         let symbols: any[] = [];
         try {
-            if (api_base.api) {
-                const response = await api_base.api.send({ active_symbols: 'brief', product_type: 'basic' });
-                if (response.active_symbols && response.active_symbols.length > 0) {
-                    symbols = response.active_symbols;
-                }
+            const response = await api_base.getActiveSymbols();
+            if (Array.isArray(response) && response.length > 0) {
+                symbols = response;
             }
         } catch (error) {
             console.warn('[AnalysisStore] API active_symbols fetch failed:', error);

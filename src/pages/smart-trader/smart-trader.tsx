@@ -2,7 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import Text from '@/components/shared_ui/text';
 import { localize } from '@deriv-com/translations';
+import { api_base } from '@/external/bot-skeleton/services/api/api-base';
 import { generateDerivApiInstance, V2GetActiveClientId, V2GetActiveToken, getLoginId } from '@/external/bot-skeleton/services/api/appId';
+import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
 import { historyToTicks } from '@/external/bot-skeleton/utils/binary-utils';
 // import { tradeOptionToBuy } from '@/external/bot-skeleton/services/tradeEngine/utils/helpers';
 import { contract_stages } from '@/constants/contract-stage';
@@ -41,6 +43,85 @@ const tradeOptionToBuy = (contract_type: string, trade_option: any) => {
         buy.parameters.barrier = trade_option.prediction;
     }
     return buy;
+};
+
+const isWebSocketOpen = (api: any) => api?.connection?.readyState === WebSocket.OPEN;
+
+const waitForApiConnection = async (api: any, timeoutMs = 15000, retries = 3) => {
+    if (!api) throw new Error('API not initialized');
+    let currentApi = api;
+    const appId = getAppId();
+
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+        const socketUrl = currentApi.connection?.url || getSocketURL();
+        const readyState = currentApi.connection?.readyState;
+
+        console.debug('[SmartTrader] waitForApiConnection attempt', {
+            attempt,
+            readyState,
+            socketUrl,
+            appId,
+        });
+
+        if (isWebSocketOpen(currentApi)) return currentApi;
+
+        if (readyState > WebSocket.CONNECTING && api_base?.init) {
+            console.debug('[SmartTrader] WebSocket closed/errored, reinitializing central API');
+            await api_base.init(true);
+            currentApi = api_base.api ?? currentApi;
+        }
+
+        if (isWebSocketOpen(currentApi)) return currentApi;
+
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const onOpen = () => {
+                    cleanup();
+                    resolve();
+                };
+
+                const onCloseOrError = (event: Event) => {
+                    cleanup();
+                    reject(new Error(`WebSocket closed or errored before open: ${event.type}`));
+                };
+
+                const onTimeout = () => {
+                    cleanup();
+                    reject(new Error('WebSocket connection timeout'));
+                };
+
+                const cleanup = () => {
+                    window.clearTimeout(timeoutId);
+                    currentApi.connection?.removeEventListener('open', onOpen);
+                    currentApi.connection?.removeEventListener('close', onCloseOrError);
+                    currentApi.connection?.removeEventListener('error', onCloseOrError);
+                };
+
+                const timeoutId = window.setTimeout(onTimeout, timeoutMs);
+                currentApi.connection?.addEventListener('open', onOpen);
+                currentApi.connection?.addEventListener('close', onCloseOrError);
+                currentApi.connection?.addEventListener('error', onCloseOrError);
+            });
+        } catch (error) {
+            console.warn('[SmartTrader] waitForApiConnection attempt failed', { attempt, error });
+            if (attempt === retries) {
+                throw error;
+            }
+            if (api_base?.init) {
+                await api_base.init(true);
+                currentApi = api_base.api ?? currentApi;
+            }
+            continue;
+        }
+
+        if (isWebSocketOpen(currentApi)) return currentApi;
+
+        if (attempt === retries) {
+            throw new Error('WebSocket failed to open within timeout');
+        }
+    }
+
+    throw new Error('WebSocket connection could not be established');
 };
 
 const SmartTrader = observer(() => {
@@ -320,15 +401,48 @@ const SmartTrader = observer(() => {
 
     useEffect(() => {
         // Initialize API connection and fetch active symbols
-        const api = generateDerivApiInstance();
+        const api = api_base.api ?? generateDerivApiInstance();
         apiRef.current = api;
+
+        const fetchActiveSymbols = async (socketApi: any) => {
+            const payload = { active_symbols: 'brief' };
+            const socketUrl = socketApi.connection?.url || getSocketURL();
+            const appId = getAppId();
+
+            console.debug('[SmartTrader] active_symbols request payload', {
+                payload,
+                socketUrl,
+                appId,
+                readyState: socketApi.connection?.readyState,
+            });
+
+            const response = await socketApi.send(payload);
+            console.debug('[SmartTrader] active_symbols response', response);
+
+            if (!response) {
+                throw new Error('No response received from active_symbols request');
+            }
+            if (response.error) {
+                throw response.error;
+            }
+            if (!Array.isArray(response.active_symbols)) {
+                throw new Error(`Unexpected active_symbols response: ${JSON.stringify(response)}`);
+            }
+
+            return response.active_symbols;
+        };
+
         const init = async () => {
             try {
+                let socketApi = api_base.api ?? api;
+                socketApi = await waitForApiConnection(socketApi);
+                apiRef.current = socketApi;
+
                 // Authorize if token exists
                 const token = V2GetActiveToken();
                 if (token) {
                     try {
-                        const { authorize, error } = await api.authorize(token);
+                        const { authorize, error } = await socketApi.authorize(token);
                         if (error) {
                             console.error('Authorization error:', error);
                             setStatus('Please log in to start trading.');
@@ -349,10 +463,8 @@ const SmartTrader = observer(() => {
                     setStatus('Please log in to start trading.');
                 }
 
-                // Fetch active symbols (volatility indices)
-                const { active_symbols, error: asErr } = await api.send({ active_symbols: 'brief' });
-                if (asErr) throw asErr;
-                const syn = (active_symbols || [])
+                const activeSymbols = await fetchActiveSymbols(socketApi);
+                const syn = activeSymbols
                     .filter((s: any) => /synthetic/i.test(s.market))
                     .filter((s: any) => /^Volatility\s+\d+(?:\s|\(|$)/i.test(s.display_name))
                     .map((s: any) => ({ symbol: s.symbol, display_name: s.display_name }))
@@ -361,15 +473,17 @@ const SmartTrader = observer(() => {
                         const valueB = Number(b.display_name.match(/Volatility\s+(\d+)/i)?.[1] ?? 0);
                         return valueA - valueB || a.display_name.localeCompare(b.display_name);
                     });
+
                 setSymbols(syn);
                 if (!symbol && syn[0]?.symbol) setSymbol(syn[0].symbol);
                 if (syn[0]?.symbol) startTicks(syn[0].symbol);
             } catch (e: any) {
-                // eslint-disable-next-line no-console
                 console.error('SmartTrader init error', e);
-                setStatus(e?.message || 'Failed to load symbols');
+                const errorMessage = e?.message || JSON.stringify(e) || 'Failed to load symbols';
+                setStatus(errorMessage);
             }
         };
+
         init();
 
         return () => {
@@ -387,7 +501,9 @@ const SmartTrader = observer(() => {
                     apiRef.current?.connection?.removeEventListener('message', contractMessageHandlerRef.current);
                     contractMessageHandlerRef.current = null;
                 }
-                api?.disconnect?.();
+                if (api && api !== api_base.api) {
+                    api.disconnect?.();
+                }
             } catch { /* noop */ }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps

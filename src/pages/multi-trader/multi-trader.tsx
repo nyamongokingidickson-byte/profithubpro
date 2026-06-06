@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '@/hooks/useStore';
 import { observer } from 'mobx-react-lite';
-import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
+import { getAppId, getSocketURL, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
 import './multi-trader.scss';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -55,7 +55,9 @@ interface TradeResult {
 
 const APP_ID = getAppId();
 const SERVER_URL = getSocketURL();
-const WS_URL = `wss://${SERVER_URL}/websockets/v3?app_id=${APP_ID}`;
+const WS_URL = SERVER_URL.startsWith('wss://') || SERVER_URL.startsWith('ws://')
+    ? SERVER_URL
+    : getPublicWebSocketURL(APP_ID);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

@@ -1,14 +1,22 @@
-import { getAppId, getSocketURL } from '@/components/shared';
+import { getAppId, getSocketURL, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
 import { website_name } from '@/utils/site-config';
 import DerivAPIBasic from '@deriv/deriv-api/dist/DerivAPIBasic';
 import { getInitialLanguage } from '@deriv-com/translations';
 import APIMiddleware from './api-middleware';
 
+const normalizeSocket = (socketUrl) => {
+    if (!socketUrl) return '';
+    if (socketUrl.startsWith('wss://') || socketUrl.startsWith('ws://')) return socketUrl;
+    if (socketUrl.includes('/')) return `wss://${socketUrl}`;
+    return '';
+};
+
 export const generateDerivApiInstance = (custom_ws_url) => {
-    const cleanedServer = getSocketURL().replace(/[^a-zA-Z0-9.]/g, '');
-    const cleanedAppId = getAppId()?.replace?.(/[^a-zA-Z0-9]/g, '') ?? getAppId();
-    const socket_url = custom_ws_url || `wss://${cleanedServer}/websockets/v3?app_id=${cleanedAppId}&l=${getInitialLanguage()}&brand=${website_name.toLowerCase()}`;
-    const deriv_socket = new WebSocket(socket_url);
+    const appId = getAppId();
+    const socketUrl = custom_ws_url || getSocketURL();
+    const normalizedUrl = normalizeSocket(socketUrl);
+    const finalUrl = normalizedUrl || getPublicWebSocketURL(Number(appId));
+    const deriv_socket = new WebSocket(finalUrl);
     const deriv_api = new DerivAPIBasic({
         connection: deriv_socket,
         middleware: new APIMiddleware({}),

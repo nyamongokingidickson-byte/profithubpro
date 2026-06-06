@@ -157,8 +157,23 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
 
     useEffect(() => {
         if (!isAuthorizing && client) {
-            const subscription = api_base?.api?.onMessage().subscribe(handleMessages);
-            msg_listener.current = { unsubscribe: subscription?.unsubscribe };
+            let subId: string | null = null;
+            let cancelled = false;
+
+            const cb = (transformedData: any) => {
+                // Wrap to reuse existing handleMessages which expects { data }
+                handleMessages({ data: transformedData });
+            };
+
+            (async () => {
+                try {
+                    subId = await api_base.subscribeTo({ balance: 1, account: 'all' }, cb as any);
+                    if (cancelled && subId) await api_base.unsubscribeById(subId);
+                    if (subId) msg_listener.current = { unsubscribe: () => api_base.unsubscribeById(subId) };
+                } catch (e) {
+                    console.warn('[CoreStoreProvider] subscribeTo balance listener failed', e);
+                }
+            })();
         }
 
         return () => {
