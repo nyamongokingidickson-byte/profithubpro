@@ -8,10 +8,13 @@ class DerivWebSocket {
     private listeners: Map<string, Set<TCallback>> = new Map();
     private reconnectAttempts = 0;
     private maxReconnectAttempts = 10;
-    private endpoint = 'wss://ws.derivws.com/websockets/v3';
 
     constructor(appId?: string) {
         this.appId = appId || getAppId();
+    }
+
+    private getEndpoint(): string {
+        return `wss://api.derivws.com/trading/v1/options/ws/public?app_id=${this.appId}`;
     }
 
     public connect(): Promise<void> {
@@ -22,7 +25,7 @@ class DerivWebSocket {
                 }
 
                 console.log(`[DerivWebSocket] Connecting with App ID: ${this.appId}`);
-                this.ws = new WebSocket(`${this.endpoint}?app_id=${this.appId}`);
+                this.ws = new WebSocket(this.getEndpoint());
 
                 this.ws.onopen = () => {
                     console.log('[DerivWebSocket] Connected');

@@ -1,4 +1,4 @@
-import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
+import { getAppId, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
 
 type TCallback = (data: any) => void;
 
@@ -14,8 +14,7 @@ class DerivWebSocket {
     }
 
     private getEndpoint(): string {
-        const serverUrl = getSocketURL();
-        return `wss://${serverUrl}/websockets/v3?app_id=${this.appId}`;
+        return getPublicWebSocketURL(Number(this.appId));
     }
 
     public connect(): Promise<void> {

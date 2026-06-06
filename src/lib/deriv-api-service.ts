@@ -1,4 +1,4 @@
-import { getAppId, getSocketURL } from '@/components/shared/utils/config/config';
+import { getAppId, getPublicWebSocketURL } from '@/components/shared/utils/config/config';
 import { transformRequest, transformResponse } from '@/utils/api-migration-adapter';
 
 export enum ConnectionState {
@@ -29,8 +29,7 @@ class DerivApiService {
     private state: ConnectionState = ConnectionState.DISCONNECTED;
 
     private getEndpoint(): string {
-        const serverUrl = getSocketURL();
-        return `wss://${serverUrl}/websockets/v3?app_id=${this.appId}`;
+        return getPublicWebSocketURL(Number(this.appId));
     }
     private reconnectAttempts: number = 0;
     private maxReconnectDelay: number = 5000;

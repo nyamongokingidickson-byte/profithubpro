@@ -3,6 +3,9 @@ import { isStaging } from '../url/helpers';
 
 export const DERIV_NEW_AUTH_URL = 'https://auth.deriv.com/oauth2/auth';
 export const DERIV_NEW_TOKEN_URL = 'https://auth.deriv.com/oauth2/token';
+export const DERIV_API_REST_BASE = 'https://api.derivws.com';
+export const DERIV_OAUTH_URL = 'https://oauth.deriv.com/oauth2/authorize';
+export const DERIV_OAUTH_TOKEN_URL = 'https://oauth.deriv.com/oauth2/token';
 
 export const APP_IDS = {
     LOCALHOST: 36300,
@@ -121,6 +124,18 @@ export const getSocketURL = () => {
     const server_url = getDefaultServerURL();
 
     return server_url;
+};
+
+export const getPublicWebSocketURL = (appId: number) => {
+    return `wss://api.derivws.com/trading/v1/options/ws/public?app_id=${appId}`;
+};
+
+export const getDemoWebSocketURL = (appId: number) => {
+    return `wss://api.derivws.com/trading/v1/options/ws/demo?app_id=${appId}`;
+};
+
+export const getRealWebSocketURL = (appId: number) => {
+    return `wss://api.derivws.com/trading/v1/options/ws/real?app_id=${appId}`;
 };
 
 export const checkAndSetEndpointFromUrl = () => {
