@@ -16,11 +16,10 @@ export function createCodeVerifier(): string {
 }
 
 export function createCodeChallenge(verifier: string): Promise<string> {
-    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
-        .then(hash => {
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
-            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-        });
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then(hash => {
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(hash)));
+        return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    });
 }
 
 export function createState(): string {
@@ -29,10 +28,21 @@ export function createState(): string {
 
 const OAUTH_CODE_VERIFIER_KEY = 'oauth_code_verifier';
 const OAUTH_STATE_KEY = 'oauth_state';
+const OAUTH_REDIRECT_URI_KEY = 'oauth_redirect_uri';
+const OAUTH_FALLBACK_SUFFIX = '_fallback';
+const PKCE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 const setStorageItem = (key: string, value: string) => {
     try {
         sessionStorage.setItem(key, value);
+    } catch {
+        // ignore storage failures
+    }
+    try {
+        localStorage.setItem(
+            `${key}${OAUTH_FALLBACK_SUFFIX}`,
+            JSON.stringify({ value, expiresAt: Date.now() + PKCE_TTL_MS })
+        );
     } catch {
         // ignore storage failures
     }
@@ -44,20 +54,40 @@ const removeStorageItem = (key: string) => {
     } catch {
         // ignore storage failures
     }
+    try {
+        localStorage.removeItem(`${key}${OAUTH_FALLBACK_SUFFIX}`);
+    } catch {
+        // ignore storage failures
+    }
 };
 
 const getStorageItem = (key: string): string | null => {
     try {
-        return sessionStorage.getItem(key);
+        const sessionValue = sessionStorage.getItem(key);
+        if (sessionValue) return sessionValue;
+    } catch {
+        // ignore storage failures
+    }
+    try {
+        const rawFallback = localStorage.getItem(`${key}${OAUTH_FALLBACK_SUFFIX}`);
+        if (!rawFallback) return null;
+        const parsed = JSON.parse(rawFallback) as { value?: string; expiresAt?: number };
+        if (parsed?.value && (!parsed.expiresAt || Date.now() <= parsed.expiresAt)) {
+            return parsed.value;
+        }
+        localStorage.removeItem(`${key}${OAUTH_FALLBACK_SUFFIX}`);
     } catch {
         // ignore storage failures
     }
     return null;
 };
 
-export const storePKCEState = (verifier: string, state: string) => {
+export const storePKCEState = (verifier: string, state: string, redirectUri?: string) => {
     setStorageItem(OAUTH_CODE_VERIFIER_KEY, verifier);
     setStorageItem(OAUTH_STATE_KEY, state);
+    if (redirectUri) {
+        setStorageItem(OAUTH_REDIRECT_URI_KEY, redirectUri);
+    }
 };
 
 export const popPKCEVerifier = (): string | null => {
@@ -66,14 +96,19 @@ export const popPKCEVerifier = (): string | null => {
     return verifier;
 };
 
+export const retrieveOAuthRedirectUri = (): string | null => {
+    return getStorageItem(OAUTH_REDIRECT_URI_KEY);
+};
+
 export const clearPKCEVerifier = () => {
     removeStorageItem(OAUTH_CODE_VERIFIER_KEY);
     removeStorageItem(OAUTH_STATE_KEY);
+    removeStorageItem(OAUTH_REDIRECT_URI_KEY);
 };
 
 export const validatePKCEState = (incomingState: string): boolean => {
     const savedState = getStorageItem(OAUTH_STATE_KEY);
-    return incomingState === savedState;
+    return Boolean(savedState) && incomingState === savedState;
 };
 
 export const generateState = (): string => generateRandomString(32);

@@ -480,6 +480,7 @@ export default class ClientStore {
         localStorage.removeItem('active_loginid');
         localStorage.removeItem('accountsList');
         localStorage.removeItem('authToken');
+        localStorage.removeItem('refreshToken');
         localStorage.removeItem('clientAccounts');
         removeCookies('client_information');
 
@@ -505,22 +506,19 @@ export default class ClientStore {
         }
 
         const resolveNavigation = () => {
-            if (window.history.length > 1) {
-                history.back();
-            } else {
-                window.location.replace('/');
+            if (window.location.pathname !== '/') {
+                window.history.replaceState({}, '', '/');
             }
         };
-        return api_base?.api
-            ?.logout()
+
+        return Promise.resolve(api_base?.api?.logout?.())
             .then(() => {
                 resolveNavigation();
                 return Promise.resolve();
             })
-            .catch((error: Error) => {
-                console.error('test Logout failed:', error);
+            .catch(() => {
                 resolveNavigation();
-                return Promise.reject(error);
+                return Promise.resolve();
             });
     };
 }

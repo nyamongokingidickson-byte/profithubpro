@@ -114,14 +114,21 @@ class APIBase {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`,
+                        Authorization: `Bearer ${token}`,
                     },
                     body: JSON.stringify({ accountId: account_id }),
                 });
                 if (response.ok) {
                     const data = await response.json();
-                    otp_ws_url = data.ws_url || data.wsUrl || '';
-                    console.log('[APIBase] Retained authenticated OTP WS URL');
+                    otp_ws_url = data?.data?.url || data?.ws_url || data?.wsUrl || data?.url || '';
+                    if (otp_ws_url) {
+                        console.log('[APIBase] Obtained authenticated OTP WS URL');
+                    }
+                } else if (response.status === 401 || response.status === 403) {
+                    console.warn('[APIBase] Stored auth token rejected by OTP endpoint; clearing stale session');
+                    clearAuthData();
+                    setIsAuthorized(false);
+                    this.is_authorized = false;
                 }
             } catch (e) {
                 console.error('[APIBase] Failed to get OTP url:', e);
@@ -140,14 +147,21 @@ class APIBase {
             const wrapped_api = new Proxy(original_api, {
                 get(target, prop, receiver) {
                     if (prop === 'authorize') {
-                        return async (token: string) => {
-                            console.log('[APIBase Proxy] Intercepting authorize call, returning cached auth state...');
+                        return async () => {
                             const loginId = localStorage.getItem('active_loginid') || '';
                             const clientAccounts = JSON.parse(localStorage.getItem('clientAccounts') || '{}');
+                            const isAccountVirtual = (acc: any) =>
+                                Number(
+                                    acc?.is_virtual ??
+                                        (acc?.account_type === 'demo' ||
+                                            String(acc?.loginid || '').startsWith('VR') ||
+                                            String(acc?.loginid || '').startsWith('DOT'))
+                                );
                             const account_list = Object.values(clientAccounts).map((acc: any) => ({
                                 loginid: acc.loginid,
-                                currency: acc.currency,
-                                is_virtual: acc.loginid.startsWith('VR') ? 1 : 0,
+                                currency: acc.currency || 'USD',
+                                balance: Number(acc.balance ?? 0),
+                                is_virtual: isAccountVirtual(acc),
                             }));
                             const country = localStorage.getItem('client.country') || '';
                             const activeAccount = clientAccounts[loginId];
@@ -157,10 +171,11 @@ class APIBase {
                                     loginid: loginId,
                                     account_list,
                                     country,
-                                    currency: currency,
-                                    is_virtual: loginId.startsWith('VR') ? 1 : 0,
+                                    currency,
+                                    balance: Number(activeAccount?.balance ?? 0),
+                                    is_virtual: isAccountVirtual(activeAccount ?? { loginid: loginId }),
                                 },
-                                error: null
+                                error: null,
                             };
                         };
                     }
@@ -245,7 +260,9 @@ class APIBase {
             }
         }
 
-        if (!this.has_active_symbols && !V2GetActiveToken()) {
+        const hasAuthenticatedSocket = Boolean(otp_ws_url && V2GetActiveToken());
+
+        if (!this.has_active_symbols && !hasAuthenticatedSocket) {
             this.active_symbols_promise = this.getActiveSymbols();
         }
 
@@ -254,9 +271,11 @@ class APIBase {
         if (this.time_interval) clearInterval(this.time_interval);
         this.time_interval = null;
 
-        if (V2GetActiveToken()) {
+        if (hasAuthenticatedSocket) {
             setIsAuthorizing(true);
             await this.authorizeAndSubscribe();
+        } else {
+            setIsAuthorizing(false);
         }
 
         chart_api.init(force_create_connection);
@@ -350,8 +369,11 @@ class APIBase {
 
     async getSelfExclusion() {
         if (!this.api || !this.is_authorized) return;
-        await this.api.getSelfExclusion();
-        // TODO: fix self exclusion
+        try {
+            await this.api.getSelfExclusion();
+        } catch {
+            // get_self_exclusion is not supported on Deriv New Options WS endpoints
+        }
     }
 
     async subscribe() {

@@ -1,10 +1,24 @@
 import { createCodeChallenge, createCodeVerifier, createState, storePKCEState, clearPKCEVerifier } from '@/utils/pkce';
 import { isStaging } from '../url/helpers';
 
+const resolveAuthEndpoint = (envValue: string | undefined, fallback: string) => {
+    const trimmed = envValue?.trim();
+    if (!trimmed || trimmed.includes('oauth.deriv.com')) {
+        return fallback;
+    }
+    return trimmed;
+};
+
 export const DERIV_API_REST_BASE = process.env.DERIV_API_REST_BASE || 'https://api.derivws.com/trading/v1/options';
-export const DERIV_OAUTH_URL = process.env.DERIV_OAUTH_URL || 'https://oauth.deriv.com/oauth2/authorize';
-export const DERIV_OAUTH_TOKEN_URL = process.env.DERIV_TOKEN_URL || 'https://oauth.deriv.com/oauth2/token';
-export const DERIV_OAUTH_REVOKE_URL = process.env.DERIV_OAUTH_REVOKE_URL || 'https://oauth.deriv.com/oauth2/revoke';
+export const DERIV_OAUTH_URL = resolveAuthEndpoint(process.env.DERIV_OAUTH_URL, 'https://auth.deriv.com/oauth2/auth');
+export const DERIV_OAUTH_TOKEN_URL = resolveAuthEndpoint(
+    process.env.DERIV_TOKEN_URL,
+    'https://auth.deriv.com/oauth2/token'
+);
+export const DERIV_OAUTH_REVOKE_URL = resolveAuthEndpoint(
+    process.env.DERIV_OAUTH_REVOKE_URL,
+    'https://auth.deriv.com/oauth2/revoke'
+);
 export const DERIV_WS_PUBLIC_URL = process.env.DERIV_WS_PUBLIC_URL || 'wss://api.derivws.com/trading/v1/options/ws/public';
 export const DERIV_NEW_AUTH_URL = DERIV_OAUTH_URL;
 export const DERIV_NEW_TOKEN_URL = DERIV_OAUTH_TOKEN_URL;
@@ -205,6 +219,7 @@ const OAUTH_CLIENT_ID =
         ? ENV_OAUTH_CLIENT_ID
         : '34J0u7zObmeCX5lnl8zm7';
 const REDIRECT_URI = process.env.REDIRECT_URI?.trim();
+const OAUTH_SCOPE = process.env.OAUTH_SCOPE?.trim() || 'trade';
 
 export const getClientId = () => {
     return OAUTH_CLIENT_ID;
@@ -220,6 +235,13 @@ export const getRedirectUri = () => {
         return REDIRECT_URI;
     }
 
+    if (
+        typeof window !== 'undefined' &&
+        (window.location.hostname === 'dylantrades.site' || window.location.hostname === 'www.dylantrades.site')
+    ) {
+        return 'https://dylantrades.site/callback';
+    }
+
     const origin = window.location.origin;
     return `${origin}/callback`;
 };
@@ -233,30 +255,24 @@ export const generateOAuthURL = async (prompt?: string) => {
 
     // Clear any stale PKCE values before storing a fresh login attempt
     clearPKCEVerifier();
-    storePKCEState(code_verifier, state);
+    storePKCEState(code_verifier, state, redirect_uri);
 
-    console.log('🔐 [Frontend] PKCE State stored:', { 
-        state, 
+    console.log('🔐 [Frontend] PKCE State stored:', {
+        state,
         code_verifier: code_verifier.substring(0, 20) + '...',
         code_challenge: code_challenge.substring(0, 20) + '...',
-        redirect_uri 
+        redirect_uri,
     });
 
     const params = new URLSearchParams({
         response_type: 'code',
         client_id,
         redirect_uri,
-        scope: 'trade account_manage',
+        scope: OAUTH_SCOPE,
         state,
         code_challenge,
         code_challenge_method: 'S256',
     });
-
-    const legacyAppId = getLegacyAppId();
-    if (legacyAppId) {
-        params.set('app_id', legacyAppId.toString());
-        console.log('🔐 [Frontend] Appending legacy app_id to OAuth URL:', legacyAppId);
-    }
 
     if (prompt) {
         params.set('prompt', prompt);

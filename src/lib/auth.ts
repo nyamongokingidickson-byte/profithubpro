@@ -1,7 +1,35 @@
 import Cookies from 'js-cookie';
 import { getRedirectUri } from '@/components/shared/utils/config/config';
-import { clearPKCEVerifier, popPKCEVerifier, validatePKCEState } from '../utils/pkce';
 import derivApiService from '@/lib/deriv-api-service';
+import {
+    clearPKCEVerifier,
+    popPKCEVerifier,
+    retrieveOAuthRedirectUri,
+    validatePKCEState,
+} from '../utils/pkce';
+
+const isVirtualAccount = (accountId: string, accountType?: string): boolean => {
+    return (
+        accountType === 'demo' ||
+        accountId.startsWith('VR') ||
+        accountId.startsWith('DOT')
+    );
+};
+
+async function fetchAccountsWithRetry(accessToken: string): Promise<Response> {
+    const requestInit: RequestInit = {
+        method: 'GET',
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+        },
+    };
+    const firstResponse = await fetch('/api/accounts', requestInit);
+    if (firstResponse.status === 503) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        return fetch('/api/accounts', requestInit);
+    }
+    return firstResponse;
+}
 
 export async function startLogin(): Promise<void> {
     try {
@@ -33,24 +61,16 @@ export async function startSignup(): Promise<void> {
 
 export async function handleCallback(): Promise<{ success: boolean; error?: string }> {
     console.log('📍 [Frontend] Callback handler triggered');
-    console.log('📍 [Frontend] URL:', window.location.href);
-    console.log('📍 [Frontend] Search params:', window.location.search);
-    
+
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
     const error = urlParams.get('error');
     const errorDescription = urlParams.get('error_description');
 
-    console.log('📍 [Frontend] Parsed params:', {
-        code: code ? code.substring(0, 20) + '...' : 'null',
-        state: state ? state.substring(0, 20) + '...' : 'null',
-        error,
-        errorDescription
-    });
-
     if (error) {
         console.error('❌ [Frontend] OAuth error:', error, errorDescription);
+        clearPKCEVerifier();
         return { success: false, error: errorDescription || error };
     }
 
@@ -60,30 +80,22 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
     }
 
     if (!validatePKCEState(state)) {
-        const savedState = sessionStorage.getItem('oauth_state');
-        console.error('❌ [Frontend] State validation failed', {
-            incomingState: state,
-            savedState,
-        });
+        console.error('❌ [Frontend] State validation failed');
         clearPKCEVerifier();
-        return { success: false, error: 'State mismatch' };
+        return { success: false, error: 'State mismatch. Please try signing in again.' };
     }
 
     const codeVerifier = popPKCEVerifier();
     if (!codeVerifier) {
-        console.error('❌ [Frontend] Code verifier not found in sessionStorage');
-        return { success: false, error: 'Code verifier not found' };
+        console.error('❌ [Frontend] Code verifier not found in storage');
+        clearPKCEVerifier();
+        return { success: false, error: 'PKCE code verifier not found. Please try signing in again.' };
     }
 
+    // Use the exact redirect_uri stored when starting the authorization flow
+    const redirect_uri = retrieveOAuthRedirectUri() || getRedirectUri();
+
     try {
-        const redirect_uri = getRedirectUri();
-        const code_verifier_short = codeVerifier.substring(0, 20) + '...';
-        console.log('📤 [Frontend] Sending to /api/auth/exchange-token:', {
-            code: code.substring(0, 20) + '...',
-            code_verifier: code_verifier_short,
-            redirect_uri,
-        });
-        // Use our server-side exchange endpoint to avoid CORS issues and to allow the server to set HTTP-only cookies
         const response = await fetch('/api/auth/exchange-token', {
             method: 'POST',
             headers: {
@@ -98,6 +110,7 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            clearPKCEVerifier();
             return {
                 success: false,
                 error: errorData.error_description || errorData.error || 'Token exchange failed',
@@ -109,6 +122,7 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
         const refresh_token = tokenData.refresh_token || tokenData.refreshToken;
 
         if (!access_token) {
+            clearPKCEVerifier();
             return { success: false, error: 'Access token was not returned' };
         }
 
@@ -118,59 +132,62 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
         }
 
         try {
-            console.log('📡 [Frontend] Fetching Deriv accounts using proxy...', {
-                token_preview: access_token.substring(0, 15) + '...'
-            });
-            const accountsResponse = await fetch('/api/accounts', {
-                method: 'GET',
-                headers: {
-                    Authorization: `Bearer ${access_token}`,
-                },
-            });
-
-            console.log('📡 [Frontend] Accounts response status:', accountsResponse.status);
+            const accountsResponse = await fetchAccountsWithRetry(access_token);
 
             if (accountsResponse.ok) {
                 const accountsData = await accountsResponse.json();
-                console.log('📡 [Frontend] Accounts data received:', accountsData);
                 const accountsList: Record<string, string> = {};
-                const clientAccounts: Record<string, { loginid: string; token: string; currency: string; balance: number }> = {};
+                const clientAccounts: Record<
+                    string,
+                    {
+                        loginid: string;
+                        token: string;
+                        currency: string;
+                        balance: number;
+                        is_virtual: number;
+                        account_type?: string;
+                    }
+                > = {};
 
                 if (Array.isArray(accountsData?.data)) {
-                    accountsData.data.forEach((account: { account_id: string; currency?: string; balance?: number }) => {
-                        if (account.account_id) {
-                            accountsList[account.account_id] = access_token;
-                            clientAccounts[account.account_id] = {
-                                loginid: account.account_id,
-                                token: access_token,
-                                currency: account.currency || '',
-                                balance: account.balance || 0,
-                            };
+                    accountsData.data.forEach(
+                        (account: {
+                            account_id: string;
+                            account_type?: string;
+                            currency?: string;
+                            balance?: number;
+                        }) => {
+                            if (account.account_id) {
+                                const virtualFlag = isVirtualAccount(account.account_id, account.account_type) ? 1 : 0;
+                                accountsList[account.account_id] = access_token;
+                                clientAccounts[account.account_id] = {
+                                    loginid: account.account_id,
+                                    token: access_token,
+                                    currency: account.currency || 'USD',
+                                    balance: Number(account.balance ?? 0),
+                                    is_virtual: virtualFlag,
+                                    account_type: account.account_type,
+                                };
+                            }
                         }
-                    });
-                } else {
-                    console.warn('⚠️ [Frontend] accountsData.data is not an array:', accountsData?.data);
+                    );
                 }
 
-                console.log('📡 [Frontend] Processed accounts:', {
-                    accountsListKeys: Object.keys(accountsList),
-                    clientAccountsKeys: Object.keys(clientAccounts)
-                });
-
-                if (Object.keys(accountsList).length > 0) {
+                const accountIds = Object.keys(accountsList);
+                if (accountIds.length > 0) {
                     localStorage.setItem('accountsList', JSON.stringify(accountsList));
                     localStorage.setItem('clientAccounts', JSON.stringify(clientAccounts));
-                    const firstAccountId = Object.keys(accountsList)[0];
-                    if (firstAccountId) {
-                        localStorage.setItem('active_loginid', firstAccountId);
-                    }
-                    console.log('✅ [Frontend] Saved accounts and active login ID to localStorage');
-                } else {
-                    console.error('❌ [Frontend] No accounts found to save in localStorage');
+                    const preferredDemoId = accountIds.find(id => clientAccounts[id]?.is_virtual === 1);
+                    localStorage.setItem('active_loginid', preferredDemoId || accountIds[0]);
                 }
             } else {
                 const errText = await accountsResponse.text();
-                console.error('❌ [Frontend] Accounts fetch failed with status:', accountsResponse.status, 'body:', errText);
+                console.error(
+                    '❌ [Frontend] Accounts fetch failed with status:',
+                    accountsResponse.status,
+                    'body:',
+                    errText
+                );
             }
         } catch (accountsError) {
             console.error('❌ [Frontend] Failed to fetch Deriv accounts after token exchange:', accountsError);
@@ -182,6 +199,7 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
         return { success: true };
     } catch (err) {
         console.error('Error exchanging token:', err);
+        clearPKCEVerifier();
         return { success: false, error: 'Network error during token exchange' };
     }
 }
@@ -198,7 +216,7 @@ export async function connectAuthenticatedWebSocket(accountId: string): Promise<
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
+                Authorization: `Bearer ${accessToken}`,
             },
             body: JSON.stringify({ accountId }),
         });
@@ -209,13 +227,12 @@ export async function connectAuthenticatedWebSocket(accountId: string): Promise<
         }
 
         const data = await response.json();
-        const wsUrl = data.ws_url || data.wsUrl;
+        const wsUrl = data?.data?.url || data?.ws_url || data?.wsUrl || data?.url;
         if (!wsUrl) {
             console.error('No ws_url returned from OTP endpoint', data);
             return false;
         }
 
-        console.log('Connecting DerivApiService using OTP ws_url...');
         derivApiService.connectWithOtp(wsUrl);
         return true;
     } catch (e) {
