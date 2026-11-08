@@ -282,13 +282,18 @@ const AppWrapper = observer(() => {
     };
     return (
         <React.Fragment>
-            <div className='main'>
+            <div
+                className={classNames('main', {
+                    'main--dtrader': active_tab === DBOT_TABS.DTRADER,
+                })}
+            >
                 <div
                     className={classNames('main__container', {
                         'main__container--active': active_tour && active_tab === DASHBOARD && !isDesktop,
+                        'main__container--dtrader': active_tab === DBOT_TABS.DTRADER,
                     })}
                 >
-                    <div>
+                    <div className={classNames({ 'main__tabs-host--dtrader': active_tab === DBOT_TABS.DTRADER })}>
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top is_scrollable>
                             <div
                                 label={
@@ -666,7 +671,7 @@ const AppWrapper = observer(() => {
             </div>
             <DesktopWrapper>
                 <div className='main__run-strategy-wrapper'>
-                    <RunStrategy />
+                    {active_tab !== DBOT_TABS.DTRADER && <RunStrategy />}
                     <RunPanel />
                 </div>
                 <ChartModal />
