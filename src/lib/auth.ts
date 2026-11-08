@@ -21,14 +21,22 @@ async function fetchAccountsWithRetry(accessToken: string): Promise<Response> {
         method: 'GET',
         headers: {
             Authorization: `Bearer ${accessToken}`,
+            Accept: 'application/json',
         },
     };
-    const firstResponse = await fetch('/api/accounts', requestInit);
-    if (firstResponse.status === 503) {
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        return fetch('/api/accounts', requestInit);
+    try {
+        const firstResponse = await fetch('/api/accounts', requestInit);
+        if (firstResponse.status === 503) {
+            await new Promise(resolve => setTimeout(resolve, 1200));
+            return fetch('/api/accounts', requestInit);
+        }
+        if (firstResponse.status === 404 || firstResponse.status >= 500) {
+            return fetch('https://api.derivws.com/trading/v1/options/accounts', requestInit);
+        }
+        return firstResponse;
+    } catch {
+        return fetch('https://api.derivws.com/trading/v1/options/accounts', requestInit);
     }
-    return firstResponse;
 }
 
 export async function startLogin(): Promise<void> {
@@ -108,22 +116,38 @@ export async function handleCallback(): Promise<{ success: boolean; error?: stri
             }),
         });
 
+        const rawText = await response.text();
+        let responseData: Record<string, any> = {};
+        try {
+            responseData = rawText ? JSON.parse(rawText) : {};
+        } catch {
+            responseData = {};
+        }
+
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
             clearPKCEVerifier();
             return {
                 success: false,
-                error: errorData.error_description || errorData.error || 'Token exchange failed',
+                error:
+                    responseData.error_description ||
+                    responseData.error ||
+                    `Token exchange failed (HTTP ${response.status})`,
             };
         }
 
-        const tokenData = await response.json();
+        const tokenData = responseData;
         const access_token = tokenData.access_token || tokenData.accessToken;
         const refresh_token = tokenData.refresh_token || tokenData.refreshToken;
 
         if (!access_token) {
             clearPKCEVerifier();
             return { success: false, error: 'Access token was not returned' };
+        }
+
+        try {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } catch {
+            // Ignore history state errors
         }
 
         localStorage.setItem('authToken', access_token);

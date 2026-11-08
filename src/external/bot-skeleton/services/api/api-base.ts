@@ -109,8 +109,8 @@ class APIBase {
 
         if (token && account_id) {
             try {
-                // Fetch authenticated OTP WebSocket URL
-                const response = await fetch('/api/ws/otp', {
+                // Fetch authenticated OTP WebSocket URL (serverless first, direct Options API fallback)
+                let response = await fetch('/api/ws/otp', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -118,6 +118,18 @@ class APIBase {
                     },
                     body: JSON.stringify({ accountId: account_id }),
                 });
+                if (response.status === 404 || response.status >= 500) {
+                    response = await fetch(
+                        `https://api.derivws.com/trading/v1/options/accounts/${encodeURIComponent(account_id)}/otp`,
+                        {
+                            method: 'POST',
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                Accept: 'application/json',
+                            },
+                        }
+                    );
+                }
                 if (response.ok) {
                     const data = await response.json();
                     otp_ws_url = data?.data?.url || data?.ws_url || data?.wsUrl || data?.url || '';

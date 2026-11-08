@@ -23,5 +23,5 @@
         },
         "types": ["jest", "@testing-library/jest-dom", "node"]
     },
-    "include": ["src", "api"]
+    "include": ["src"]
 }
