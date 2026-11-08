@@ -389,27 +389,27 @@ class APIBase {
     }
 
     async subscribe() {
-        const subscribeToStream = (streamName: string) => {
-            return doUntilDone(
-                () => {
-                    const subscription = this.api?.send({
-                        [streamName]: 1,
-                        subscribe: 1,
-                        ...(streamName === 'balance' ? { account: 'all' } : {}),
-                    });
-                    if (subscription) {
-                        this.current_auth_subscriptions.push(subscription);
-                    }
-                    return subscription;
-                },
-                [],
-                this
-            );
+        const subscribeToStream = async (streamName: string) => {
+            try {
+                const subscription = this.api?.send({
+                    [streamName]: 1,
+                    subscribe: 1,
+                    ...(streamName === 'balance' ? { account: 'all' } : {}),
+                });
+                if (subscription) {
+                    this.current_auth_subscriptions.push(
+                        Promise.resolve(subscription).catch(() => ({ subscription: { id: '', unsubscribe: () => {} } })) as any
+                    );
+                }
+                await subscription;
+            } catch (e) {
+                console.warn(`[APIBase] Stream subscription (${streamName}) skipped:`, e);
+            }
         };
 
         const streamsToSubscribe = ['balance', 'transaction', 'proposal_open_contract'];
 
-        await Promise.all(streamsToSubscribe.map(subscribeToStream));
+        await Promise.allSettled(streamsToSubscribe.map(subscribeToStream));
     }
 
     // New subscribe helper that deduplicates subscriptions and routes callbacks
@@ -481,19 +481,34 @@ class APIBase {
     }
 
     getActiveSymbols = async () => {
-        await doUntilDone(() => this.api?.send({ active_symbols: 'brief' }), [], this).then(
-            ({ active_symbols = [], error = {} }) => {
-                const pip_sizes = {};
-                if (active_symbols.length) this.has_active_symbols = true;
-                active_symbols.forEach(({ symbol, pip }: { symbol: string; pip: string }) => {
-                    (pip_sizes as Record<string, number>)[symbol] = +(+pip).toExponential().substring(3);
-                });
-                this.pip_sizes = pip_sizes as Record<string, number>;
-                this.toggleRunButton(false);
-                this.active_symbols = active_symbols;
-                return active_symbols || error;
-            }
-        );
+        if (!this.api) return [];
+
+        try {
+            const timeout = new Promise<any>((_, reject) =>
+                setTimeout(() => reject(new Error('active_symbols timeout')), 8000)
+            );
+            const result = await Promise.race([
+                this.api.send({ active_symbols: 'brief' }),
+                timeout,
+            ]);
+            const rawSymbols = result?.active_symbols || [];
+            const normalized = transformResponse({ active_symbols: rawSymbols }, 'active_symbols').active_symbols || [];
+            const pip_sizes: Record<string, number> = {};
+            if (normalized.length) this.has_active_symbols = true;
+            normalized.forEach(({ symbol, pip }: { symbol: string; pip: string | number }) => {
+                if (symbol && pip !== undefined && pip !== null) {
+                    pip_sizes[symbol] = Math.abs(+(+pip).toExponential().substring(3));
+                }
+            });
+            this.pip_sizes = pip_sizes;
+            this.toggleRunButton(false);
+            this.active_symbols = normalized;
+            return normalized;
+        } catch (e) {
+            console.warn('[APIBase] getActiveSymbols failed or timed out:', e);
+            this.toggleRunButton(false);
+            return this.active_symbols || [];
+        }
     };
 
     toggleRunButton = (toggle: boolean) => {
