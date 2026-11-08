@@ -239,7 +239,7 @@ export const getRedirectUri = () => {
         typeof window !== 'undefined' &&
         (window.location.hostname === 'dylantrades.site' || window.location.hostname === 'www.dylantrades.site')
     ) {
-        return 'https://dylantrades.site/callback';
+        return 'https://www.dylantrades.site/callback';
     }
 
     const origin = window.location.origin;

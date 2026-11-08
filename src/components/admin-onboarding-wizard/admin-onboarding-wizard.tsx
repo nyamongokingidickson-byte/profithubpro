@@ -90,7 +90,7 @@ const AdminOnboardingWizard: React.FC<AdminOnboardingWizardProps> = ({
             siteUrl: 'https://dylantrades.site',
             clientId: '34J0u7zObmeCX5lnl8zm7',
             legacyAppId: '34J0u7zObmeCX5lnl8zm7',
-            redirectUri: 'https://dylantrades.site/callback',
+            redirectUri: 'https://www.dylantrades.site/callback',
             authUrl: 'https://auth.deriv.com/oauth2/auth',
             tokenUrl: 'https://auth.deriv.com/oauth2/token',
             revokeUrl: 'https://auth.deriv.com/oauth2/revoke',
