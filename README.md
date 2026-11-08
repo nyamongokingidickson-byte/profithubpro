@@ -6,6 +6,7 @@ Automated trading and bot-building platform powered by Deriv API & OAuth 2.0 PKC
 - **Domain**: `https://dylantrades.site` (`https://www.dylantrades.site`)
 - **App / OAuth Client ID**: `34J0u7zObmeCX5lnl8zm7`
 - **OAuth Callback URI**: `https://dylantrades.site/callback`
+- **Node.js Runtime**: `24.x`
 
 ## Environment Variables
 
