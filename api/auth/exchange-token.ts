@@ -16,7 +16,7 @@ const resolveTokenEndpoint = (envValue: string | undefined): string => {
 };
 
 // Canonical redirect URI must match the registered OAuth redirect exactly.
-const REDIRECT_URI = process.env.REDIRECT_URI?.trim() || 'https://dylantrades.site/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI?.trim() || 'https://www.dylantrades.site/callback';
 const ALLOWED_PRODUCTION_ORIGINS = new Set([
     'https://dylantrades.site',
     'https://www.dylantrades.site',
