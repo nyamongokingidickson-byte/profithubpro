@@ -358,12 +358,14 @@ export default class ClientStore {
 
     getToken = () => {
         const accountList = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
-        return accountList[this.loginid] ?? '';
+        const directToken = localStorage.getItem('authToken');
+        return accountList[this.loginid] || (directToken && directToken !== 'null' ? directToken : '') || '';
     };
 
     getTokenForAccount = (loginid: string) => {
         const accountList = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
-        return accountList[loginid] ?? '';
+        const directToken = localStorage.getItem('authToken');
+        return accountList[loginid] || (directToken && directToken !== 'null' ? directToken : '') || '';
     };
 
     setAccountStatus(status: GetAccountStatus | undefined) {

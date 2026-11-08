@@ -19,11 +19,13 @@ export default class AppStore {
     dbot_store: RootStore | null;
     api_helpers_store: TApiHelpersStore | null;
     timer: ReturnType<typeof setInterval> | null;
+    is_workspace_initializing = false;
     disposeReloadOnLanguageChangeReaction: unknown;
     disposeCurrencyReaction: unknown;
     disposeSwitchAccountListener: unknown;
     disposeLandingCompanyChangeReaction: unknown;
     disposeResidenceChangeReaction: unknown;
+    disposeActiveTabResizeReaction: unknown;
 
     constructor(root_store: RootStore, core: RootStore['core']) {
         makeObservable(this, {
@@ -177,18 +179,45 @@ export default class AppStore {
             }
         }, 10000);
 
-        if (!this.dbot_store) return;
+        if (!this.dbot_store) {
+            this.setDBotEngineStores();
+        }
+        if (!this.dbot_store || this.is_workspace_initializing || (window as any).Blockly?.derivWorkspace) {
+            if ((window as any).Blockly?.derivWorkspace) {
+                blockly_store.setWorkspaceReady(true);
+            }
+            return;
+        }
 
+        this.is_workspace_initializing = true;
         blockly_store.setLoading(true);
-        await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
-
-        blockly_store.setContainerSize();
-        blockly_store.setLoading(false);
+        try {
+            await DBot.initWorkspace('/', this.dbot_store, this.api_helpers_store, ui.is_mobile, false);
+            blockly_store.setWorkspaceReady(true);
+            blockly_store.setContainerSize();
+        } catch (err) {
+            console.error('[AppStore] DBot.initWorkspace failed:', err);
+        } finally {
+            this.is_workspace_initializing = false;
+            blockly_store.setLoading(false);
+        }
 
         this.registerCurrencyReaction.call(this);
         this.registerOnAccountSwitch.call(this);
         this.registerLandingCompanyChangeReaction.call(this);
         this.registerResidenceChangeReaction.call(this);
+
+        this.disposeActiveTabResizeReaction = reaction(
+            () => this.root_store.dashboard.active_tab,
+            active_tab => {
+                if (active_tab === 1 && (window as any).Blockly?.derivWorkspace) {
+                    setTimeout(() => {
+                        blockly_store.setContainerSize();
+                        window.dispatchEvent(new Event('resize'));
+                    }, 50);
+                }
+            }
+        );
 
         window.addEventListener('click', this.onClickOutsideBlockly);
 
@@ -208,9 +237,15 @@ export default class AppStore {
     onUnmount = () => {
         DBot.terminateBot();
         DBot.terminateConnection();
+        this.is_workspace_initializing = false;
+        this.root_store.blockly_store.setWorkspaceReady(false);
         if ((window as any).Blockly?.derivWorkspace) {
             clearInterval((window as any).Blockly?.derivWorkspace.save_workspace_interval);
             (window as any).Blockly.derivWorkspace?.dispose();
+            (window as any).Blockly.derivWorkspace = null;
+        }
+        if (typeof this.disposeActiveTabResizeReaction === 'function') {
+            this.disposeActiveTabResizeReaction();
         }
         if (typeof this.disposeReloadOnLanguageChangeReaction === 'function') {
             this.disposeReloadOnLanguageChangeReaction();

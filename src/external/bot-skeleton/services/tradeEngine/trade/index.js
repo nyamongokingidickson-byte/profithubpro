@@ -105,37 +105,38 @@ export default class TradeEngine extends Balance(Purchase(Sell(OpenContract(Prop
     }
 
     loginAndGetBalance(token) {
-        if (this.token === token) {
+        if (this.token === token && this.accountInfo?.loginid) {
             return Promise.resolve();
         }
-        // for strategies using total runs, GetTotalRuns function is trying to get loginid and it gets called before Proposals calls.
-        // the below required loginid to be set in Proposal calls where loginAndGetBalance gets resolved.
-        // Earlier this used to happen as soon as we get ticks_history response and by the time GetTotalRuns gets called we have required info.
-        this.accountInfo = api_base.account_info;
-        this.token = api_base.token;
-        return new Promise(resolve => {
-            // Try to recover from a situation where API doesn't give us a correct response on
-            // "proposal_open_contract" which would make the bot run forever. When there's a "sell"
-            // event, wait a couple seconds for the API to give us the correct "proposal_open_contract"
-            // response, if there's none after x seconds. Send an explicit request, which _should_
-            // solve the issue. This is a backup!
+        const fallbackLoginId = localStorage.getItem('active_loginid') || '';
+        this.accountInfo = api_base.account_info?.loginid
+            ? api_base.account_info
+            : { ...(api_base.account_info || {}), loginid: fallbackLoginId };
+        this.token = api_base.token || token;
+
+        if (api_base.api && !this.has_transaction_recovery_subscription) {
+            this.has_transaction_recovery_subscription = true;
             const subscription = api_base.api.onMessage().subscribe(({ data }) => {
-                if (data.msg_type === 'transaction' && data.transaction.action === 'sell') {
+                if (data?.msg_type === 'transaction' && data?.transaction?.action === 'sell') {
                     this.transaction_recovery_timeout = setTimeout(() => {
                         const { contract } = this.data;
-                        const is_same_contract = contract.contract_id === data.transaction.contract_id;
-                        const is_open_contract = contract.status === 'open';
+                        const is_same_contract = contract?.contract_id === data.transaction.contract_id;
+                        const is_open_contract = contract?.status === 'open' || !contract?.is_sold;
                         if (is_same_contract && is_open_contract) {
                             doUntilDone(() => {
-                                api_base.api.send({ proposal_open_contract: 1, contract_id: contract.contract_id });
+                                return api_base.api.send({
+                                    proposal_open_contract: 1,
+                                    contract_id: contract.contract_id,
+                                });
                             }, ['PriceMoved']);
                         }
                     }, 1500);
                 }
-                resolve();
             });
             api_base.pushSubscription(subscription);
-        });
+        }
+
+        return Promise.resolve();
     }
 
     observe() {

@@ -19,7 +19,12 @@ export default Engine =>
 
                     this.data.contract = contract;
 
-                    broadcastContract({ accountID: api_base.account_info.loginid, ...contract });
+                    const activeAccountId =
+                        api_base.account_info?.loginid ||
+                        this.accountInfo?.loginid ||
+                        localStorage.getItem('active_loginid') ||
+                        '';
+                    broadcastContract({ accountID: activeAccountId, ...contract });
 
                     if (this.isSold) {
                         this.contractId = '';
@@ -27,7 +32,7 @@ export default Engine =>
                         this.updateTotals(contract);
                         contractStatus({
                             id: 'contract.sold',
-                            data: contract.transaction_ids.sell,
+                            data: contract.transaction_ids?.sell ?? contract.contract_id,
                             contract,
                         });
 

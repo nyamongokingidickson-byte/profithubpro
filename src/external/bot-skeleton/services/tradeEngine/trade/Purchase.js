@@ -20,26 +20,46 @@ export default Engine =>
             const onSuccess = response => {
                 // Don't unnecessarily send a forget request for a purchased contract.
                 const { buy } = response;
+                const txId = buy.transaction_id ?? buy.contract_id;
+                const activeAccountId =
+                    this.accountInfo?.loginid ||
+                    api_base.account_info?.loginid ||
+                    localStorage.getItem('active_loginid') ||
+                    '';
 
                 contractStatus({
                     id: 'contract.purchase_received',
-                    data: buy.transaction_id,
+                    data: txId,
                     buy,
                 });
 
                 this.contractId = buy.contract_id;
                 this.store.dispatch(purchaseSuccessful());
 
+                // Explicitly subscribe to proposal_open_contract for this contract_id
+                // so Deriv Options V1 streams live & final settlement updates reliably.
+                if (buy.contract_id && api_base.api) {
+                    api_base.api
+                        .send({
+                            proposal_open_contract: 1,
+                            contract_id: buy.contract_id,
+                            subscribe: 1,
+                        })
+                        .catch(err => {
+                            console.warn('[Purchase] proposal_open_contract subscribe fallback:', err);
+                        });
+                }
+
                 if (this.is_proposal_subscription_required) {
                     this.renewProposalsOnPurchase();
                 }
 
                 delayIndex = 0;
-                log(LogTypes.PURCHASE, { longcode: buy.longcode, transaction_id: buy.transaction_id });
+                log(LogTypes.PURCHASE, { longcode: buy.longcode || '', transaction_id: txId });
                 info({
-                    accountID: this.accountInfo.loginid,
+                    accountID: activeAccountId,
                     totalRuns: this.updateAndReturnTotalRuns(),
-                    transaction_ids: { buy: buy.transaction_id },
+                    transaction_ids: { buy: txId },
                     contract_type,
                     buy_price: buy.buy_price,
                 });
