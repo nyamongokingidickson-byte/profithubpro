@@ -1,9 +1,13 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { serialize } from 'cookie';
 
-const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID || '33pC7qk8i9WtRbTbSOkcq';
+const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID || '34J0u7zObmeCX5lnl8zm7';
 // Canonical redirect URI must match the registered OAuth redirect exactly.
-const REDIRECT_URI = process.env.REDIRECT_URI || 'https://profithubpro.vercel.app/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI || 'https://dylantrades.site/callback';
+const ALLOWED_PRODUCTION_ORIGINS = new Set([
+    'https://dylantrades.site',
+    'https://www.dylantrades.site',
+]);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     res.setHeader('Allow', 'POST,OPTIONS');
@@ -51,8 +55,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (REDIRECT_URI) {
                 const base = new URL(REDIRECT_URI);
                 const base_path = base.pathname.replace(/\/$/, '') || '/callback';
-                const base_origin_matches = incoming.origin === base.origin || allowed_localhost;
-                const allowed_paths = [base_path];
+                const is_same_origin = Boolean(origin_header && incoming.origin === origin_header);
+                const base_origin_matches =
+                    incoming.origin === base.origin ||
+                    ALLOWED_PRODUCTION_ORIGINS.has(incoming.origin) ||
+                    is_same_origin ||
+                    allowed_localhost;
+                const allowed_paths = Array.from(new Set([base_path, '/callback']));
 
                 if (!base_origin_matches || !allowed_paths.includes(incoming_path)) {
                     console.warn('Rejecting unexpected redirect_uri', {

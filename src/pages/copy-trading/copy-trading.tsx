@@ -95,11 +95,11 @@ const CopyTrading = observer(() => {
 
         setConnectionStatus('connecting');
 
-        const APP_ID = String(getAppId?.() ?? localStorage.getItem('APP_ID') ?? '113536');
+        const APP_ID = String(getAppId?.() ?? localStorage.getItem('APP_ID') ?? '34J0u7zObmeCX5lnl8zm7');
         const server = getSocketURL?.() || '';
         const wsUrl = server.startsWith('wss://') || server.startsWith('ws://')
             ? server
-            : getPublicWebSocketURL(Number(APP_ID));
+            : getPublicWebSocketURL(APP_ID);
 
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;

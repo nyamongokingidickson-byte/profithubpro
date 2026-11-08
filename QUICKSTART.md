@@ -22,9 +22,9 @@ Save the output. Example: `xQ7mKh9pL2nBvQ3rF5tJ8wYz+Ac=...`
 4. Add these 4 variables (applies to all environments):
 
 ```
-OAUTH_CLIENT_ID          → 33pC7qk8i9WtRbTbSOkcq
-LEGACY_APP_ID            → 113536
-REDIRECT_URI             → https://profithubpro.vercel.app/callback
+OAUTH_CLIENT_ID          → 34J0u7zObmeCX5lnl8zm7
+APP_ID                   → 34J0u7zObmeCX5lnl8zm7
+REDIRECT_URI             → https://dylantrades.site/callback
 SESSION_SECRET           → (paste your generated secret)
 ```
 
@@ -45,7 +45,7 @@ Wait for Vercel to build and deploy (1-2 minutes).
 
 Visit:
 ```
-https://profithubpro.vercel.app/auth
+https://dylantrades.site/auth
 ```
 
 You should see:
@@ -74,7 +74,7 @@ Check Vercel build logs:
 3. Check build logs for errors
 
 ### "REDIRECT_URI mismatch"?
-1. Verify in Vercel dashboard that `REDIRECT_URI=https://profithubpro.vercel.app/callback`
+1. Verify in Vercel dashboard that `REDIRECT_URI=https://dylantrades.site/callback`
 2. Verify in Deriv OAuth app settings that redirect URI matches exactly
 
 ### Login Redirects to Blank Page?
@@ -101,9 +101,9 @@ Look for `code=` and `state=` in URL:
 
 | Purpose | URL |
 |---------|-----|
-| Test Auth | https://profithubpro.vercel.app/auth |
-| OAuth Redirect | https://profithubpro.vercel.app/callback |
-| Token Exchange | https://profithubpro.vercel.app/api/auth/exchange-token |
+| Test Auth | https://dylantrades.site/auth |
+| OAuth Redirect | https://dylantrades.site/callback |
+| Token Exchange | https://dylantrades.site/api/auth/exchange-token |
 
 ---
 

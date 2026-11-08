@@ -151,7 +151,7 @@
                     <field name="TEXT"></field>
                   </shadow>
                   <block type="text" id="bD+4A..]Du?YLC6.4xP3">
-                    <field name="TEXT">PROFITHUB RISE FALL AUTO</field>
+                    <field name="TEXT">DYLAN TRADES RISE FALL AUTO</field>
                   </block>
                 </value>
                 <next>
@@ -580,7 +580,7 @@
         <field name="NOTIFICATION_SOUND">silent</field>
         <value name="MESSAGE">
           <shadow type="text" id=",sPjO1P`iO$m|B_jNswM">
-            <field name="TEXT">PROFITHUB RISE FALL AUTO</field>
+            <field name="TEXT">DYLAN TRADES RISE FALL AUTO</field>
           </shadow>
         </value>
         <next>

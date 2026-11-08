@@ -16,7 +16,7 @@ const RemoteLinkGroup = observer(() => {
     const internal_tabs = [
         { label: localize('Signals Tab'), url: '', key: 'signals_key' },
         { label: localize('Easy Tool'), url: '', key: 'easy_tool_key' },
-        { label: localize('Profithub Analysis'), url: 'https://analysisprofithub.vercel.app/', key: 'analysis_hub_key' },
+        { label: localize('Dylan Trades Analysis'), url: 'https://analysisprofithub.vercel.app/', key: 'analysis_hub_key' },
     ];
 
     useEffect(() => {

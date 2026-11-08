@@ -146,7 +146,7 @@ export default class CopyTraderStore {
         }
 
         const app_id = getAppId();
-        const ws = new WebSocket(getPublicWebSocketURL(Number(app_id)));
+        const ws = new WebSocket(getPublicWebSocketURL(app_id));
 
         account.ws = ws;
         account.status = 'Pending';
@@ -378,7 +378,7 @@ export default class CopyTraderStore {
         }
 
         const app_id = getAppId();
-        const ws = new WebSocket(getPublicWebSocketURL(Number(app_id)));
+        const ws = new WebSocket(getPublicWebSocketURL(app_id));
 
         this.real_account_ws = ws;
 

@@ -5,6 +5,7 @@ import { useTranslations } from '@deriv-com/translations';
 import { useOauth2 } from '@/hooks/auth/useOauth2';
 import useThemeSwitcher from '@/hooks/useThemeSwitcher';
 import { useStore } from '@/hooks/useStore';
+import { website_name } from '@/utils/site-config';
 import './app-logo.scss';
 
 export const AppLogo = ({ onMenuClick }: { onMenuClick?: () => void }) => {
@@ -50,6 +51,11 @@ export const AppLogo = ({ onMenuClick }: { onMenuClick?: () => void }) => {
             >
                 <LegacyMenuHamburger1pxIcon iconSize='sm' fill='var(--text-general)' />
             </button>
+
+            <a className='app-header__brand' href='/'>
+                <img src='/dylantrades.svg' alt={website_name} className='app-header__brand-logo' />
+                <span className='app-header__brand-name'>{website_name}</span>
+            </a>
 
             {isMenuOpen && (
                 <div className='app-header__menu-popover'>

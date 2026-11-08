@@ -26,9 +26,9 @@ const setXmlBase = (base: string) => {
 const decompress = (data: string | null) => (data ? LZString.decompressFromUTF16(data) : null);
 const compress = (data: string) => LZString.compressToUTF16(data);
 
-const getDomainByAppId = (app_id: number): string | null =>
+const getDomainByAppId = (app_id: number | string): string | null =>
     Object.keys(domain_app_ids).find(
-        domain => domain_app_ids[domain as keyof typeof domain_app_ids] === app_id
+        domain => String(domain_app_ids[domain as keyof typeof domain_app_ids]) === String(app_id)
     ) ?? null;
 
 export const getCachedXml = async (file: string): Promise<string | null> => {

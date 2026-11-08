@@ -164,7 +164,7 @@ oauthRouter.post(
                 {
                     grant_type: 'refresh_token',
                     refresh_token: refreshToken,
-                    client_id: process.env.OAUTH_CLIENT_ID,
+                    client_id: process.env.OAUTH_CLIENT_ID || '34J0u7zObmeCX5lnl8zm7',
                 },
                 {
                     headers: {
@@ -226,7 +226,7 @@ oauthRouter.post(
                 process.env.OAUTH_REVOKE_URL!,
                 {
                     token: token || refreshToken,
-                    client_id: process.env.OAUTH_CLIENT_ID,
+                    client_id: process.env.OAUTH_CLIENT_ID || '34J0u7zObmeCX5lnl8zm7',
                 },
                 {
                     headers: {

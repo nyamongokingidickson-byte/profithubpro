@@ -9,15 +9,15 @@ export const DERIV_NEW_TOKEN_URL = DERIV_OAUTH_TOKEN_URL;
 export const API_MODE: 'legacy' | 'new' = 'new';
 
 export const APP_IDS = {
-    LOCALHOST: 36300,
-    TMP_STAGING: 121856,
-    STAGING: 121856,
-    STAGING_BE: 121856,
-    STAGING_ME: 121856,
-    PRODUCTION: 121856,
-    PRODUCTION_BE: 121856,
-    PRODUCTION_ME: 121856,
-    VERCEL: 121856,
+    LOCALHOST: '34J0u7zObmeCX5lnl8zm7',
+    TMP_STAGING: '34J0u7zObmeCX5lnl8zm7',
+    STAGING: '34J0u7zObmeCX5lnl8zm7',
+    STAGING_BE: '34J0u7zObmeCX5lnl8zm7',
+    STAGING_ME: '34J0u7zObmeCX5lnl8zm7',
+    PRODUCTION: '34J0u7zObmeCX5lnl8zm7',
+    PRODUCTION_BE: '34J0u7zObmeCX5lnl8zm7',
+    PRODUCTION_ME: '34J0u7zObmeCX5lnl8zm7',
+    VERCEL: '34J0u7zObmeCX5lnl8zm7',
 };
 
 export const livechat_license_id = 12049137;
@@ -31,8 +31,8 @@ export const domain_app_ids = {
     'dbot.deriv.com': APP_IDS.PRODUCTION,
     'dbot.deriv.be': APP_IDS.PRODUCTION_BE,
     'dbot.deriv.me': APP_IDS.PRODUCTION_ME,
-    '22-dec.vercel.app': APP_IDS.VERCEL,
-    'profithubtool.vercel.app': '121856',
+    'dylantrades.site': '34J0u7zObmeCX5lnl8zm7',
+    'www.dylantrades.site': '34J0u7zObmeCX5lnl8zm7',
 };
 
 export const getCurrentProductionDomain = () =>
@@ -62,7 +62,7 @@ const getDefaultServerURL = () => {
 export const getDefaultAppIdAndUrl = () => {
     const current_domain = getCurrentProductionDomain() ?? '';
     const app_id = domain_app_ids[current_domain as keyof typeof domain_app_ids] ?? APP_IDS.PRODUCTION;
-    const server_url = getPublicWebSocketURL(Number(app_id));
+    const server_url = getPublicWebSocketURL(app_id);
 
     if (isTestLink()) {
         return { app_id: APP_IDS.LOCALHOST, server_url };
@@ -114,18 +114,18 @@ export const getSocketURL = () => {
         return `wss://${local_storage_server_url}/trading/v1/options/ws/public?app_id=${getAppId()}`;
     }
 
-    return getPublicWebSocketURL(Number(getAppId()));
+    return getPublicWebSocketURL(getAppId());
 };
 
-export const getPublicWebSocketURL = (appId: number) => {
+export const getPublicWebSocketURL = (appId: number | string) => {
     return `wss://api.derivws.com/trading/v1/options/ws/public?app_id=${appId}`;
 };
 
-export const getDemoWebSocketURL = (appId: number) => {
+export const getDemoWebSocketURL = (appId: number | string) => {
     return `wss://api.derivws.com/trading/v1/options/ws/demo?app_id=${appId}`;
 };
 
-export const getRealWebSocketURL = (appId: number) => {
+export const getRealWebSocketURL = (appId: number | string) => {
     return `wss://api.derivws.com/trading/v1/options/ws/real?app_id=${appId}`;
 };
 
@@ -167,8 +167,8 @@ export const getDebugServiceWorker = () => {
 
 const legacyGenerateOAuthURL = () => {
     const is_local = isLocal();
-    const app_id = is_local ? APP_IDS.LOCALHOST : '121856';
-    const login_url = `https://oauth.deriv.com/oauth2/authorize?app_id=${app_id}&brand=deriv&redirect=home&state=`;
+    const app_id = is_local ? APP_IDS.LOCALHOST : getAppId();
+    const login_url = `https://oauth.deriv.com/oauth2/authorize?app_id=${app_id}&brand=dylantrades&redirect=home&state=`;
  
     console.log('[Config] Generated Legacy OAuth URL:', login_url);
     return login_url;

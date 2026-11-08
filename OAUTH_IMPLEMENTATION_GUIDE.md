@@ -1,8 +1,8 @@
-# OAuth 2.0 PKCE Implementation Guide for ProTraders
+# OAuth 2.0 PKCE Implementation Guide for Dylan Trades
 
 ## Overview
 
-This guide covers the complete OAuth 2.0 Authorization Code Flow with PKCE implementation for the ProTraders platform. The system supports secure authentication, automatic token refresh, trading session management, and backward compatibility with legacy authentication.
+This guide covers the complete OAuth 2.0 Authorization Code Flow with PKCE implementation for the Dylan Trades platform. The system supports secure authentication, automatic token refresh, trading session management, and backward compatibility with legacy authentication.
 
 ## Architecture
 
@@ -245,7 +245,7 @@ For backward compatibility with existing integrations:
 const config: OAuthConfig = {
     ...baseConfig,
     enableLegacyMode: true,
-    legacyAppId: '113536',
+    legacyAppId: '34J0u7zObmeCX5lnl8zm7',
 };
 
 // Existing users are automatically migrated
@@ -373,4 +373,4 @@ For detailed API documentation, see the individual component files:
 
 ## License
 
-ProTraders OAuth 2.0 Implementation - © 2026
+Dylan Trades OAuth 2.0 Implementation - © 2026

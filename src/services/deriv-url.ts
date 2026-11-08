@@ -1,6 +1,6 @@
 import { getPublicWebSocketURL, getSocketURL as getSocketURLFromConfig } from '@/components/shared/utils/config/config';
 
-export const getValidatedWebSocketURL = (appId: number, serverUrl?: string) => {
+export const getValidatedWebSocketURL = (appId: number | string, serverUrl?: string) => {
     const fallback = getPublicWebSocketURL(appId);
 
     const candidate = (serverUrl && serverUrl.trim()) || getSocketURLFromConfig();

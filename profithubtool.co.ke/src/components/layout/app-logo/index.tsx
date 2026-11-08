@@ -6,9 +6,9 @@ export const AppLogo = () => {
             <div className='header-branding-modern'>
                 <div className='brand-text-wrap'>
                     <div className='brand-main'>
-                        <span className='char-p'>P</span>ROFITHUB
+                        <span className='char-p'>D</span>YLAN
                     </div>
-                    <div className='brand-sub'>TRADERS</div>
+                    <div className='brand-sub'>TRADES</div>
                 </div>
                 <div className='brand-glow-effect' />
             </div>

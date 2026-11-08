@@ -15,7 +15,7 @@ export const generateDerivApiInstance = (custom_ws_url) => {
     const appId = getAppId();
     const socketUrl = custom_ws_url || getSocketURL();
     const normalizedUrl = normalizeSocket(socketUrl);
-    const finalUrl = normalizedUrl || getPublicWebSocketURL(Number(appId));
+    const finalUrl = normalizedUrl || getPublicWebSocketURL(appId);
     const deriv_socket = new WebSocket(finalUrl);
     const deriv_api = new DerivAPIBasic({
         connection: deriv_socket,

@@ -157,13 +157,13 @@ const AppLoader: React.FC<AppLoaderProps> = ({ onLoadingComplete, duration = 700
 
             <div className='loader-container' onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}>
                 <div className='logo'>
-                    <div className='logo-main'>PRO</div>
-                    <div className='logo-sub'>TRADERS</div>
+                    <div className='logo-main'>DYLAN</div>
+                    <div className='logo-sub'>TRADES</div>
                 </div>
 
                 <div className='welcome-message'>
                     <div className='welcome-title welcome-title--twinkle'>
-                        <strong>WELCOME TO PROTRADERS</strong>
+                        <strong>WELCOME TO DYLAN TRADES</strong>
                     </div>
                     <div className='welcome-text'>
                         Experience advanced trading with intelligent automation, professional trade execution, and a powerful platform designed for high-performance traders.

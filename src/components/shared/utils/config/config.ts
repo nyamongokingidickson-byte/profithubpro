@@ -10,21 +10,23 @@ export const DERIV_NEW_AUTH_URL = DERIV_OAUTH_URL;
 export const DERIV_NEW_TOKEN_URL = DERIV_OAUTH_TOKEN_URL;
 
 export const APP_IDS = {
-    LOCALHOST: 36300,
-    TMP_STAGING: 113536,
-    STAGING: 113536,
-    STAGING_BE: 113536,
-    STAGING_ME: 113536,
-    PRODUCTION: 113536,
-    PRODUCTION_BE: 113536,
-    PRODUCTION_ME: 113536,
+    LOCALHOST: '34J0u7zObmeCX5lnl8zm7',
+    TMP_STAGING: '34J0u7zObmeCX5lnl8zm7',
+    STAGING: '34J0u7zObmeCX5lnl8zm7',
+    STAGING_BE: '34J0u7zObmeCX5lnl8zm7',
+    STAGING_ME: '34J0u7zObmeCX5lnl8zm7',
+    PRODUCTION: '34J0u7zObmeCX5lnl8zm7',
+    PRODUCTION_BE: '34J0u7zObmeCX5lnl8zm7',
+    PRODUCTION_ME: '34J0u7zObmeCX5lnl8zm7',
+    DYLANTRADES: '34J0u7zObmeCX5lnl8zm7',
 };
 
 export const livechat_license_id = 12049137;
 export const livechat_client_id = '66aa088aad5a414484c1fd1fa8a5ace7';
 
 export const domain_app_ids = {
-    'binaryhat.site': 113536,
+    'dylantrades.site': APP_IDS.DYLANTRADES,
+    'www.dylantrades.site': APP_IDS.DYLANTRADES,
 };
 
 const LEGACY_APP_ID_STORAGE_KEY = 'config.legacy_app_id';
@@ -58,16 +60,20 @@ export const isTestLink = () => {
 
 export const isLocal = () => /localhost(:\d+)?$/i.test(window.location.hostname);
 
-export const getLegacyAppId = (): number | null => {
-    const storedLegacy = window.localStorage.getItem(LEGACY_APP_ID_STORAGE_KEY);
+export const getLegacyAppId = (): number | string | null => {
+    const storedLegacy = window.localStorage.getItem(LEGACY_APP_ID_STORAGE_KEY)?.trim();
     const legacySource = storedLegacy || LEGACY_APP_ID_ENV;
-    if (!legacySource) return null;
-    return /^[0-9]+$/.test(legacySource) ? Number(legacySource) : null;
+    if (!legacySource || legacySource === '113536') return null;
+    return /^[0-9]+$/.test(legacySource) ? Number(legacySource) : legacySource;
 };
 
 export const isLegacyModeEnabled = (): boolean => {
     const storedLegacyMode = window.localStorage.getItem(LEGACY_MODE_STORAGE_KEY);
-    return storedLegacyMode === '1' || storedLegacyMode === 'true' || !!LEGACY_APP_ID_ENV;
+    return (
+        storedLegacyMode === '1' ||
+        storedLegacyMode === 'true' ||
+        (!!LEGACY_APP_ID_ENV && LEGACY_APP_ID_ENV !== '113536')
+    );
 };
 
 const getDefaultServerURL = () => {
@@ -89,7 +95,7 @@ export const getDefaultAppIdAndUrl = () => {
     return { app_id, server_url };
 };
 
-export const getAppId = () => {
+export const getAppId = (): number | string => {
     // If legacy mode is enabled, use legacy app ID
     if (isLegacyModeEnabled()) {
         const legacyAppId = getLegacyAppId();
@@ -98,12 +104,26 @@ export const getAppId = () => {
             return legacyAppId;
         }
     }
-    
-    // Check localStorage first for user-configured app ID
-    const stored_app_id = window.localStorage.getItem('config.app_id');
-    if (stored_app_id) return Number(stored_app_id);
 
-    let app_id = null;
+    const env_app_id = process.env.APP_ID?.trim();
+    if (env_app_id && env_app_id !== '113536') {
+        return env_app_id;
+    }
+
+    // Check localStorage first for user-configured app ID (ignoring stale defaults/NaN)
+    const stored_app_id = window.localStorage.getItem('config.app_id')?.trim();
+    if (
+        stored_app_id &&
+        stored_app_id !== 'NaN' &&
+        stored_app_id !== 'null' &&
+        stored_app_id !== 'undefined' &&
+        stored_app_id !== '113536' &&
+        /^[A-Za-z0-9_-]+$/.test(stored_app_id)
+    ) {
+        return stored_app_id;
+    }
+
+    let app_id: number | string;
     const current_domain = getCurrentProductionDomain() ?? '';
 
     if (isStaging()) {
@@ -130,15 +150,15 @@ export const getSocketURL = () => {
     return getPublicWebSocketURL(getAppId());
 };
 
-export const getPublicWebSocketURL = (appId: number) => {
+export const getPublicWebSocketURL = (appId: number | string) => {
     return `${DERIV_WS_PUBLIC_URL}?app_id=${appId}`;
 };
 
-export const getDemoWebSocketURL = (appId: number) => {
+export const getDemoWebSocketURL = (appId: number | string) => {
     return `wss://api.derivws.com/trading/v1/options/ws/demo?app_id=${appId}`;
 };
 
-export const getRealWebSocketURL = (appId: number) => {
+export const getRealWebSocketURL = (appId: number | string) => {
     return `wss://api.derivws.com/trading/v1/options/ws/real?app_id=${appId}`;
 };
 
@@ -153,7 +173,7 @@ export const checkAndSetEndpointFromUrl = () => {
             url_params.delete('qa_server');
             url_params.delete('app_id');
 
-            if (/^(^(www\.)?qa[0-9]{1,4}\.deriv.dev|(.*)\.derivws\.com)$/.test(qa_server) && /^[0-9]+$/.test(app_id)) {
+            if (/^(^(www\.)?qa[0-9]{1,4}\.deriv.dev|(.*)\.derivws\.com)$/.test(qa_server) && /^[A-Za-z0-9_-]+$/.test(app_id)) {
                 localStorage.setItem('config.app_id', app_id);
                 localStorage.setItem('config.server_url', qa_server.replace(/"/g, ''));
             }
@@ -179,7 +199,11 @@ export const getDebugServiceWorker = () => {
     return false;
 };
 
-const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID || '33pC7qk8i9WtRbTbSOkcq';
+const ENV_OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID?.trim();
+const OAUTH_CLIENT_ID =
+    ENV_OAUTH_CLIENT_ID && ENV_OAUTH_CLIENT_ID !== '33pC7qk8i9WtRbTbSOkcq'
+        ? ENV_OAUTH_CLIENT_ID
+        : '34J0u7zObmeCX5lnl8zm7';
 const REDIRECT_URI = process.env.REDIRECT_URI?.trim();
 
 export const getClientId = () => {

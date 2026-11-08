@@ -56,7 +56,7 @@
       <block type="text_print" id="*[g+sQDP@/aeA%!Bfx2W">
         <value name="TEXT">
           <shadow type="text" id="d33pInvuA2BelMMz(5T6">
-            <field name="TEXT">About to Print Dollars! All the Best from this Profithub Speedbot</field>
+            <field name="TEXT">About to Print Dollars! All the Best from this Dylan Trades Speedbot</field>
           </shadow>
         </value>
         <next>
@@ -436,7 +436,7 @@
                                 <field name="TEXT"></field>
                               </shadow>
                               <block type="text" id="!,:|~ybHb~V,BOAbDmST">
-                                <field name="TEXT"> 🟢Congratulations! Target Profit Achieved! Profithub Speed Bot</field>
+                                <field name="TEXT"> 🟢Congratulations! Target Profit Achieved! Dylan Trades Speed Bot</field>
                               </block>
                             </value>
                             <next>

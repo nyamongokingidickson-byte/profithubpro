@@ -91,7 +91,7 @@
       <block type="notify">
         <field name="NOTIFICATION_TYPE">info</field>
         <field name="NOTIFICATION_SOUND">silent</field>
-        <value name="MESSAGE"><block type="text"><field name="TEXT">Profithub pro engine: analyzing</field></block></value>
+        <value name="MESSAGE"><block type="text"><field name="TEXT">Dylan Trades pro engine: analyzing</field></block></value>
         <next>
 
         <!-- Fetch Candle 2 (Last Closed) -->
@@ -200,7 +200,7 @@
                                 <block type="notify">
                                   <field name="NOTIFICATION_TYPE">success</field>
                                   <field name="NOTIFICATION_SOUND">silent</field>
-                                  <value name="MESSAGE"><block type="text"><field name="TEXT">Profithub found signal, executing CALL</field></block></value>
+                                  <value name="MESSAGE"><block type="text"><field name="TEXT">Dylan Trades found signal, executing CALL</field></block></value>
                                   <next><block type="purchase"><field name="PURCHASE_LIST">CALL</field><field name="ALLOW_BULK_PURCHASE">no</field><field name="NUM_TRADES">1</field></block></next>
                                 </block>
                               </statement>
@@ -211,7 +211,7 @@
                                 <block type="notify">
                                   <field name="NOTIFICATION_TYPE">success</field>
                                   <field name="NOTIFICATION_SOUND">silent</field>
-                                  <value name="MESSAGE"><block type="text"><field name="TEXT">Profithub found signal, executing PUT</field></block></value>
+                                  <value name="MESSAGE"><block type="text"><field name="TEXT">Dylan Trades found signal, executing PUT</field></block></value>
                                   <next><block type="purchase"><field name="PURCHASE_LIST">PUT</field><field name="ALLOW_BULK_PURCHASE">no</field><field name="NUM_TRADES">1</field></block></next>
                                 </block>
                               </statement>

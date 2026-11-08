@@ -22,7 +22,7 @@ const Endpoint = () => {
             }
             if (!values.appId) {
                 errors.appId = 'This field is required';
-            } else if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(values.appId.toString())) {
+            } else if (!/^(?:[A-Za-z0-9_-]+|(?:0|[1-9]\d*)(?:\.\d+)?)$/.test(values.appId.toString())) {
                 errors.appId = 'Please enter a valid app ID';
             }
             return errors;

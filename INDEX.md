@@ -1,6 +1,6 @@
-# 📋 INDEX - OAuth 2.0 PKCE Migration for Pacha
+# 📋 INDEX - OAuth 2.0 PKCE Migration for Dylan Trades
 
-**Project**: Deriv Bot Frontend  
+**Project**: Dylan Trades (`dylantrades.site`)  
 **Date Created**: May 11, 2026  
 **Status**: ✅ **COMPLETE & PRODUCTION READY**  
 
@@ -13,7 +13,7 @@
 2. Generate session secret
 3. Set 4 environment variables in Vercel
 4. Git push → Deploy
-5. Test at: `https://profithubpro.vercel.app/auth`
+5. Test at: `https://dylantrades.site/auth`
 
 ### Path 2: Understand It First (30 minutes)
 1. Read: **IMPLEMENTATION_SUMMARY.md** (overview)
@@ -312,9 +312,9 @@ package.json
 
 | Variable | Value | Generation |
 |----------|-------|-----------|
-| `OAUTH_CLIENT_ID` | `33pC7qk8i9WtRbTbSOkcq` | Provided |
-| `LEGACY_APP_ID` | `113536` | Provided |
-| `REDIRECT_URI` | `https://profithubpro.vercel.app/callback` | Provided |
+| `OAUTH_CLIENT_ID` | `34J0u7zObmeCX5lnl8zm7` | Provided |
+| `APP_ID` | `34J0u7zObmeCX5lnl8zm7` | Provided |
+| `REDIRECT_URI` | `https://dylantrades.site/callback` | Provided |
 | `SESSION_SECRET` | (random string) | `openssl rand -base64 32` |
 
 ---
@@ -338,7 +338,7 @@ Before deploying, verify:
 - [ ] All documentation read (at least QUICKSTART.md)
 - [ ] SESSION_SECRET generated (`openssl rand -base64 32`)
 - [ ] Environment variables prepared
-- [ ] OAuth app redirect URI already set (https://profithubpro.vercel.app/callback)
+- [ ] OAuth app redirect URI already set (https://dylantrades.site/callback)
 - [ ] Vercel project access available
 - [ ] Git repository ready to push
 

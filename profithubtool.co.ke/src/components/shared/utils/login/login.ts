@@ -35,8 +35,8 @@ export const loginUrl = ({ language }: TLoginUrl) => {
     }`;
     const getOAuthUrl = () => {
         // Special strict fix for Vercel Production to avoid any dynamic parameter issues
-        if (window.location.hostname === 'profithubtool.vercel.app') {
-            return `https://oauth.deriv.com/oauth2/authorize?app_id=121856&l=${language}&brand=deriv`;
+        if (window.location.hostname === 'dylantrades.site' || window.location.hostname === 'www.dylantrades.site') {
+            return `https://oauth.deriv.com/oauth2/authorize?app_id=34J0u7zObmeCX5lnl8zm7&l=${language}&brand=dylantrades`;
         }
 
         const current_domain = getCurrentProductionDomain();

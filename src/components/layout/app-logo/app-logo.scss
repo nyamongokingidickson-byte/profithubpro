@@ -2,10 +2,34 @@
     &__logo-container {
         display: flex;
         align-items: center;
+        gap: 1rem;
         padding-inline-start: 1.2rem;
         padding-inline-end: 2rem;
         border-inline-end: 1px solid var(--general-section-1);
         position: relative;
+    }
+
+    &__brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.8rem;
+        text-decoration: none;
+        color: var(--text-prominent);
+        white-space: nowrap;
+    }
+
+    &__brand-logo {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        flex-shrink: 0;
+    }
+
+    &__brand-name {
+        font-size: 1.5rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: var(--text-prominent);
     }
 
     &__menu-trigger {
@@ -90,8 +114,18 @@
 
     @media (max-width: 768px) {
         &__logo-container {
+            gap: 0.6rem;
             padding-inline-start: 0.8rem;
             padding-inline-end: 1rem;
+        }
+
+        &__brand-logo {
+            width: 24px;
+            height: 24px;
+        }
+
+        &__brand-name {
+            font-size: 1.3rem;
         }
 
         &__menu-trigger {

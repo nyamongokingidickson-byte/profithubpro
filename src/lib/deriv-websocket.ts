@@ -17,7 +17,7 @@ class DerivWebSocket {
 
     private getEndpoint(): string {
         const serverUrl = getSocketURL();
-        const validated = getValidatedWebSocketURL(Number(this.appId), serverUrl);
+        const validated = getValidatedWebSocketURL(this.appId, serverUrl);
         console.info(`[DerivWebSocket] Final WebSocket URL: ${validated}`);
         return validated;
     }

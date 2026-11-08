@@ -328,8 +328,8 @@ export default function ChunkLoader({ message, backgroundUrl }: ChunkLoaderProps
                     <div className='premium-loader-orbit-dot' />
                 </div>
 
-                <h1 className='premium-loader-brand'>ProTraders</h1>
-                <p className='premium-loader-subtitle'>Hub</p>
+                <h1 className='premium-loader-brand'>Dylan</h1>
+                <p className='premium-loader-subtitle'>Trades</p>
 
                 {/* Progress bar */}
                 <div className='premium-loader-progress-track'>

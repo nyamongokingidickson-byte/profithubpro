@@ -10,7 +10,7 @@ export const LOADER_CONFIG = {
 
     // App branding
     BRANDING: {
-        title: 'ProTraders',
+        title: 'Dylan Trades',
         subtitle: 'Advanced Trading Platform',
         // You can replace this with your own SVG icon
         icon: `
