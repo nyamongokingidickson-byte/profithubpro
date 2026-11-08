@@ -60,6 +60,42 @@
         padding: 0;
     }
 
+    &--dtrader {
+        flex: 1 1 auto;
+        height: 100% !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        background: #0e0e0e;
+
+        .main__container--dtrader,
+        .main__tabs-host--dtrader {
+            flex: 1 1 auto;
+            height: 100% !important;
+            min-height: 0 !important;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden !important;
+        }
+
+        .dc-tabs {
+            flex: 1 1 auto;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+        }
+
+        .dc-tabs__content {
+            flex: 1 1 auto;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column;
+            padding: 0 !important;
+            background: #0e0e0e;
+        }
+    }
+
     &--bot-builder {
         height: auto !important;
 
