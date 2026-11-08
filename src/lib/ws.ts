@@ -23,7 +23,11 @@ export async function getAuthenticatedWSUrl(accountId: string): Promise<string> 
     }
 
     const data = await response.json();
-    return data.url;
+    const resolvedUrl = data?.data?.url || data?.ws_url || data?.wsUrl || data?.url;
+    if (!resolvedUrl) {
+        throw new Error('OTP response did not contain a WebSocket URL');
+    }
+    return resolvedUrl;
 }
 
 export function connectAuthenticatedWS(otpUrl: string): WebSocket {

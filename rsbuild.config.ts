@@ -45,6 +45,7 @@ export default defineConfig({
                 DERIV_WS_PUBLIC_URL: JSON.stringify(process.env.DERIV_WS_PUBLIC_URL),
                 DERIV_API_REST_BASE: JSON.stringify(process.env.DERIV_API_REST_BASE),
                 REDIRECT_URI: JSON.stringify(process.env.REDIRECT_URI),
+                OAUTH_SCOPE: JSON.stringify(process.env.OAUTH_SCOPE),
                 GD_CLIENT_ID: JSON.stringify(process.env.GD_CLIENT_ID),
                 GD_APP_ID: JSON.stringify(process.env.GD_APP_ID),
                 GD_API_KEY: JSON.stringify(process.env.GD_API_KEY),

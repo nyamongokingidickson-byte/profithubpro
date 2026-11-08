@@ -1,25 +1,14 @@
-import { useState } from 'react';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Cookies from 'js-cookie';
+import { redirectToLogin } from '@/components/shared/utils/login/login';
 import RootStore from '@/stores/root-store';
 import { handleOidcAuthFailure } from '@/utils/auth-utils';
+import { clearPKCEVerifier } from '@/utils/pkce';
 import { Analytics } from '@deriv-com/analytics';
-import { OAuth2Logout, requestOidcAuthentication } from '@deriv-com/auth-client';
 
 /**
- * Provides an object with properties: `oAuthLogout`, `retriggerOAuth2Login`, and `isSingleLoggingIn`.
- *
- * `oAuthLogout` is a function that logs out the user of the OAuth2-enabled app.
- *
- * `retriggerOAuth2Login` is a function that retriggers the OAuth2 login flow to get a new token.
- *
- * `isSingleLoggingIn` is a boolean that indicates whether the user is currently logging in.
- *
- * The `handleLogout` argument is an optional function that will be called after logging out the user.
- * If `handleLogout` is not provided, the function will resolve immediately.
- *
- * @param {{ handleLogout?: () => Promise<void> }} [options] - An object with an optional `handleLogout` property.
- * @returns {{ oAuthLogout: () => Promise<void>; retriggerOAuth2Login: () => Promise<void>; isSingleLoggingIn: boolean }}
+ * Provides OAuth 2.0 PKCE login retrigger and clean local/server logout
+ * without relying on deriv.com-only OIDC iframe helpers.
  */
 export const useOauth2 = ({
     handleLogout,
@@ -29,69 +18,68 @@ export const useOauth2 = ({
     client?: RootStore['client'];
 } = {}) => {
     const [isSingleLoggingIn, setIsSingleLoggingIn] = useState(false);
-    const accountsList = JSON.parse(localStorage.getItem('accountsList') ?? '{}');
-    const isClientAccountsPopulated = Object.keys(accountsList).length > 0;
-    const isSilentLoginExcluded =
-        window.location.pathname.includes('/callback') || window.location.pathname.includes('endpoint');
-
-    const loggedState = Cookies.get('logged_state');
+    const isLoggingOutRef = useRef(false);
 
     useEffect(() => {
-        window.addEventListener('unhandledrejection', event => {
+        const onUnhandledRejection = (event: PromiseRejectionEvent) => {
             if (event?.reason?.error?.code === 'InvalidToken') {
                 setIsSingleLoggingIn(false);
             }
-        });
+        };
+        window.addEventListener('unhandledrejection', onUnhandledRejection);
+        return () => {
+            window.removeEventListener('unhandledrejection', onUnhandledRejection);
+        };
     }, []);
 
-    useEffect(() => {
-        const willEventuallySSO = loggedState === 'true' && !isClientAccountsPopulated;
-        const willEventuallySLO = loggedState === 'false' && isClientAccountsPopulated;
-
-        if (!isSilentLoginExcluded && (willEventuallySSO || willEventuallySLO)) {
-            setIsSingleLoggingIn(true);
-        } else {
-            setIsSingleLoggingIn(false);
-        }
-    }, [isClientAccountsPopulated, loggedState, isSilentLoginExcluded]);
-
-    const logoutHandler = async () => {
+    const logoutHandler = useCallback(async () => {
+        if (isLoggingOutRef.current) return;
+        isLoggingOutRef.current = true;
         client?.setIsLoggingOut(true);
+
         try {
-            await OAuth2Logout({
-                redirectCallbackUri: `${window.location.origin}/callback`,
-                WSLogoutAndRedirect: handleLogout ?? (() => Promise.resolve()),
-                postLogoutRedirectUri: window.location.origin,
-            }).catch(err => {
-                // eslint-disable-next-line no-console
-                console.error(err);
-            });
-            await client?.logout().catch(err => {
-                // eslint-disable-next-line no-console
-                console.error('Error during TMB logout:', err);
-            });
+            const accessToken = localStorage.getItem('authToken');
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+                },
+            }).catch(() => undefined);
+
+            localStorage.removeItem('refreshToken');
+            clearPKCEVerifier();
+            Cookies.set('logged_state', 'false', { path: '/' });
+
+            if (handleLogout) {
+                await handleLogout().catch(err => {
+                    // eslint-disable-next-line no-console
+                    console.error('Error during logout handler:', err);
+                });
+            } else {
+                await client?.logout().catch(err => {
+                    // eslint-disable-next-line no-console
+                    console.error('Error during client logout:', err);
+                });
+            }
 
             Analytics.reset();
         } catch (error) {
             // eslint-disable-next-line no-console
             console.error(error);
+        } finally {
+            client?.setIsLoggingOut(false);
+            isLoggingOutRef.current = false;
         }
-    };
-    const retriggerOAuth2Login = async () => {
+    }, [client, handleLogout]);
+
+    const retriggerOAuth2Login = useCallback(async () => {
         try {
-            await requestOidcAuthentication({
-                redirectCallbackUri: `${window.location.origin}/callback`,
-                postLogoutRedirectUri: window.location.origin,
-                state: {
-                    return_origin: window.location.origin,
-                },
-            }).catch(err => {
-                handleOidcAuthFailure(err);
-            });
+            await redirectToLogin(false);
         } catch (error) {
             handleOidcAuthFailure(error);
         }
-    };
+    }, []);
 
-    return { oAuthLogout: logoutHandler, retriggerOAuth2Login, isSingleLoggingIn };
+    return { oAuthLogout: logoutHandler, retriggerOAuth2Login, isSingleLoggingIn, isOAuth2Enabled: true };
 };

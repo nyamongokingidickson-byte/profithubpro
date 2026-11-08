@@ -91,10 +91,10 @@ const AdminOnboardingWizard: React.FC<AdminOnboardingWizardProps> = ({
             clientId: '34J0u7zObmeCX5lnl8zm7',
             legacyAppId: '34J0u7zObmeCX5lnl8zm7',
             redirectUri: 'https://dylantrades.site/callback',
-            authUrl: 'https://oauth.deriv.com/oauth2/authorize',
-            tokenUrl: 'https://oauth.deriv.com/oauth2/token',
-            revokeUrl: 'https://oauth.deriv.com/oauth2/revoke',
-            scopes: ['read', 'trade', 'payments', 'trading_information'],
+            authUrl: 'https://auth.deriv.com/oauth2/auth',
+            tokenUrl: 'https://auth.deriv.com/oauth2/token',
+            revokeUrl: 'https://auth.deriv.com/oauth2/revoke',
+            scopes: ['trade'],
             enableLegacyMode: false,
         }
     );

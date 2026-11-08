@@ -1,9 +1,22 @@
-import { NextApiRequest, NextApiResponse } from 'next';
 import { serialize } from 'cookie';
+import { NextApiRequest, NextApiResponse } from 'next';
 
-const OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID || '34J0u7zObmeCX5lnl8zm7';
+const ENV_OAUTH_CLIENT_ID = process.env.OAUTH_CLIENT_ID?.trim();
+const OAUTH_CLIENT_ID =
+    ENV_OAUTH_CLIENT_ID && ENV_OAUTH_CLIENT_ID !== '33pC7qk8i9WtRbTbSOkcq'
+        ? ENV_OAUTH_CLIENT_ID
+        : '34J0u7zObmeCX5lnl8zm7';
+
+const resolveTokenEndpoint = (envValue: string | undefined): string => {
+    const trimmed = envValue?.trim();
+    if (!trimmed || trimmed.includes('oauth.deriv.com')) {
+        return 'https://auth.deriv.com/oauth2/token';
+    }
+    return trimmed;
+};
+
 // Canonical redirect URI must match the registered OAuth redirect exactly.
-const REDIRECT_URI = process.env.REDIRECT_URI || 'https://dylantrades.site/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI?.trim() || 'https://dylantrades.site/callback';
 const ALLOWED_PRODUCTION_ORIGINS = new Set([
     'https://dylantrades.site',
     'https://www.dylantrades.site',
@@ -32,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     code_verifier: params.get('code_verifier'),
                     redirect_uri: params.get('redirect_uri'),
                 };
-            } catch (e) {
+            } catch {
                 body = {};
             }
         }
@@ -45,75 +58,70 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Enforce a safe redirect URI for the OAuth flow.
-    // Allow the configured canonical redirect URI if provided, otherwise allow the current app origin if it matches the request origin.
-        try {
-            const incoming = new URL(redirect_uri);
-            const incoming_path = incoming.pathname.replace(/\/$/, '') || '/callback';
-            const origin_header = typeof req.headers.origin === 'string' ? req.headers.origin : null;
-            const allowed_localhost = incoming.hostname === 'localhost' || incoming.hostname === '127.0.0.1';
+    try {
+        const incoming = new URL(redirect_uri);
+        const incoming_path = incoming.pathname.replace(/\/$/, '') || '/callback';
+        const origin_header = typeof req.headers.origin === 'string' ? req.headers.origin : null;
+        const forwarded_host =
+            (typeof req.headers['x-forwarded-host'] === 'string' && req.headers['x-forwarded-host'].split(',')[0].trim()) ||
+            (typeof req.headers.host === 'string' ? req.headers.host.trim() : null);
+        const forwarded_proto =
+            (typeof req.headers['x-forwarded-proto'] === 'string' && req.headers['x-forwarded-proto'].split(',')[0].trim()) ||
+            'https';
+        const derived_origin = forwarded_host ? `${forwarded_proto}://${forwarded_host}` : null;
 
-            if (REDIRECT_URI) {
-                const base = new URL(REDIRECT_URI);
-                const base_path = base.pathname.replace(/\/$/, '') || '/callback';
-                const is_same_origin = Boolean(origin_header && incoming.origin === origin_header);
-                const base_origin_matches =
-                    incoming.origin === base.origin ||
-                    ALLOWED_PRODUCTION_ORIGINS.has(incoming.origin) ||
-                    is_same_origin ||
-                    allowed_localhost;
-                const allowed_paths = Array.from(new Set([base_path, '/callback']));
+        const allowed_localhost = incoming.hostname === 'localhost' || incoming.hostname === '127.0.0.1';
+        const allowed_vercel_preview = incoming.protocol === 'https:' && incoming.hostname.endsWith('.vercel.app');
+        const is_same_origin = Boolean(
+            (origin_header && incoming.origin === origin_header) ||
+                (derived_origin && incoming.origin === derived_origin)
+        );
 
-                if (!base_origin_matches || !allowed_paths.includes(incoming_path)) {
-                    console.warn('Rejecting unexpected redirect_uri', {
-                        redirect_uri,
-                        allowed_origin: base.origin,
-                        incoming_origin: incoming.origin,
-                        incoming_path,
-                    });
-                    return res.status(400).json({ error: 'Invalid redirect_uri' });
-                }
-            } else if (origin_header) {
-                const is_same_origin = incoming.origin === origin_header;
-                if (!is_same_origin && !allowed_localhost) {
-                    console.warn('Rejecting unexpected redirect_uri for dynamic callback', {
-                        redirect_uri,
-                        origin_header,
-                        incoming_origin: incoming.origin,
-                    });
-                    return res.status(400).json({ error: 'Invalid redirect_uri' });
-                }
-                if (incoming_path !== '/callback') {
-                    console.warn('Rejecting unexpected callback path', { redirect_uri, incoming_path });
-                    return res.status(400).json({ error: 'Invalid redirect_uri' });
-                }
-            } else {
-                console.warn('Missing origin header when validating redirect_uri', { redirect_uri });
-                return res.status(400).json({ error: 'Invalid redirect_uri' });
-            }
-        } catch (err) {
-            console.warn('Invalid redirect_uri format', { redirect_uri, err });
+        const base = new URL(REDIRECT_URI);
+        const base_path = base.pathname.replace(/\/$/, '') || '/callback';
+        const origin_allowed =
+            incoming.origin === base.origin ||
+            ALLOWED_PRODUCTION_ORIGINS.has(incoming.origin) ||
+            allowed_vercel_preview ||
+            is_same_origin ||
+            allowed_localhost;
+        const allowed_paths = Array.from(new Set([base_path, '/callback']));
+
+        if (!origin_allowed || !allowed_paths.includes(incoming_path)) {
+            console.warn('Rejecting unexpected redirect_uri', {
+                redirect_uri,
+                allowed_origin: base.origin,
+                incoming_origin: incoming.origin,
+                incoming_path,
+            });
             return res.status(400).json({ error: 'Invalid redirect_uri' });
         }
+    } catch (err) {
+        console.warn('Invalid redirect_uri format', { redirect_uri, err });
+        return res.status(400).json({ error: 'Invalid redirect_uri' });
+    }
 
     try {
+        const tokenEndpoint = resolveTokenEndpoint(process.env.DERIV_TOKEN_URL);
         console.log('🔑 [Backend] Deriv token exchange request:', {
+            tokenEndpoint,
             client_id: OAUTH_CLIENT_ID,
-            code: code.substring(0, 20) + '...',
+            code: String(code).substring(0, 20) + '...',
             redirect_uri,
-            code_verifier: code_verifier.substring(0, 20) + '...',
+            code_verifier: String(code_verifier).substring(0, 20) + '...',
         });
-        const tokenEndpoint = process.env.DERIV_TOKEN_URL || 'https://oauth.deriv.com/oauth2/token';
+
         const tokenResponse = await fetch(tokenEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
+                Accept: 'application/json',
             },
             body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 client_id: OAUTH_CLIENT_ID,
                 code,
                 code_verifier,
-                // Use the same redirect_uri that was sent by the frontend
                 redirect_uri,
             }).toString(),
         });
@@ -133,40 +141,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 sent_params: {
                     client_id: OAUTH_CLIENT_ID,
                     redirect_uri,
-                    code: code.substring(0, 10) + '...',
-                    code_verifier: code_verifier.substring(0, 10) + '...'
-                }
+                    code: String(code).substring(0, 10) + '...',
+                    code_verifier: String(code_verifier).substring(0, 10) + '...',
+                },
             });
 
             return res.status(400).json({
                 error: 'Token exchange failed',
-                error_description: errorData?.error_description || errorData?.message || errorText || `HTTP Status ${tokenResponse.status}`,
+                error_description:
+                    errorData?.error_description ||
+                    errorData?.message ||
+                    errorText ||
+                    `HTTP Status ${tokenResponse.status}`,
                 deriv_response: errorData ?? errorText,
                 debug_info: {
                     client_id: OAUTH_CLIENT_ID,
                     redirect_uri,
-                }
+                },
             });
         }
 
         const tokenData = await tokenResponse.json();
         const { access_token, expires_in } = tokenData;
 
-        // Set HTTP-only cookie
-        const cookieOptions = {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'lax' as const,
-            maxAge: expires_in,
-            path: '/',
-        };
+        if (access_token) {
+            const cookieOptions = {
+                httpOnly: true,
+                secure: true,
+                sameSite: 'lax' as const,
+                ...(typeof expires_in === 'number' ? { maxAge: expires_in } : {}),
+                path: '/',
+            };
+            res.setHeader('Set-Cookie', serialize('access_token', access_token, cookieOptions));
+        }
 
-        res.setHeader('Set-Cookie', serialize('access_token', access_token, cookieOptions));
-
-        // Return the token data to the client as well so front-end can store non-HTTP-only values if needed
-        res.status(200).json(tokenData);
+        return res.status(200).json(tokenData);
     } catch (error) {
         console.error('Error exchanging token:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 }

@@ -29,7 +29,12 @@ const AccountSwitcherFooter = ({ oAuthLogout, loginid, is_logging_out, residence
     // Check if the account is a demo account from both loginid and URL parameter
     const urlParams = new URLSearchParams(window.location.search);
     const account_param = urlParams.get('account');
-    const is_virtual = loginid?.startsWith('VRTC') || account_param === 'demo' || false;
+    const is_virtual =
+        loginid?.startsWith('VRTC') ||
+        loginid?.startsWith('DOT') ||
+        Boolean(loginid && accountList[loginid]?.is_virtual) ||
+        account_param === 'demo' ||
+        false;
 
     // Get the redirect URL from handleTraderHubRedirect
     const redirectParams = {

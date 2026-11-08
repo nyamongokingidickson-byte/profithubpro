@@ -10,8 +10,8 @@ import { useApiBase } from '@/hooks/useApiBase';
 import { useStore } from '@/hooks/useStore';
 import useTMB from '@/hooks/useTMB';
 import { TLandingCompany, TSocketResponseData } from '@/types/api-types';
-import { useTranslations } from '@deriv-com/translations';
 import { transformBalanceResponse } from '@/utils/api-migration-adapter';
+import { useTranslations } from '@deriv-com/translations';
 
 type TClientInformation = {
     loginid?: string;
@@ -24,6 +24,7 @@ type TClientInformation = {
     user_id?: number | string;
     landing_company_shortcode?: string;
 };
+
 const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ children }) => {
     const currentDomain = useMemo(() => '.' + window.location.hostname.split('.').slice(-2).join('.'), []);
     const { isAuthorizing, isAuthorized, connectionStatus, accountList, activeLoginid } = useApiBase();
@@ -61,18 +62,44 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     useEffect(() => {
         const currentBalanceData = client?.all_accounts_balance?.accounts?.[activeAccount?.loginid ?? ''];
         if (currentBalanceData) {
-            client?.setBalance(currentBalanceData.balance.toFixed(getDecimalPlaces(currentBalanceData.currency)));
-            client?.setCurrency(currentBalanceData.currency);
+            const numericBalance = Number(currentBalanceData.balance ?? 0);
+            const currency = currentBalanceData.currency || activeAccount?.currency || 'USD';
+            client?.setBalance(numericBalance.toFixed(getDecimalPlaces(currency)));
+            client?.setCurrency(currency);
+        } else if (activeAccount) {
+            const fallbackBalance = Number((activeAccount as any)?.balance ?? 0);
+            const currency = activeAccount.currency || 'USD';
+            client?.setBalance(fallbackBalance.toFixed(getDecimalPlaces(currency)));
+            client?.setCurrency(currency);
         }
-
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeAccount?.loginid, client?.all_accounts_balance]);
+    }, [activeAccount, client?.all_accounts_balance]);
 
     useEffect(() => {
         if (client && activeAccount) {
             client?.setLoginId(activeLoginid);
             client?.setAccountList(accountList);
             client?.setIsLoggedIn(true);
+
+            if (Array.isArray(accountList) && accountList.length > 0) {
+                const seededAccounts: Record<string, any> = {
+                    ...(client.all_accounts_balance?.accounts ?? {}),
+                };
+                accountList.forEach((acc: any) => {
+                    if (acc?.loginid && seededAccounts[acc.loginid] === undefined) {
+                        seededAccounts[acc.loginid] = {
+                            balance: Number(acc.balance ?? 0),
+                            currency: acc.currency || 'USD',
+                            demo_account: Number(Boolean(acc.is_virtual)),
+                            type: 'deriv',
+                        };
+                    }
+                });
+                client.setAllAccountsBalance({
+                    ...(client.all_accounts_balance ?? {}),
+                    accounts: seededAccounts,
+                } as any);
+            }
         }
     }, [accountList, activeAccount, activeLoginid, client]);
 
@@ -97,9 +124,16 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
             if (!api_base?.api) return;
             appInitialization.current = true;
 
-            api_base.api?.websiteStatus().then((res: TSocketResponseData<'website_status'>) => {
-                client.setWebsiteStatus(res.website_status);
-            });
+            api_base.api
+                ?.websiteStatus()
+                .then((res: TSocketResponseData<'website_status'>) => {
+                    if (res?.website_status) {
+                        client.setWebsiteStatus(res.website_status);
+                    }
+                })
+                .catch(() => {
+                    // website_status is not supported on Deriv New Options WS endpoints
+                });
 
             // Update server time every 10 seconds
             timeInterval.current = setInterval(() => {
@@ -119,66 +153,99 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
         async (res: Record<string, unknown>) => {
             if (!res) return;
             const data = res.data as TSocketResponseData<'balance'>;
+            if (!data) return;
             const { msg_type, error } = data;
 
             if (
-                error?.code === 'AuthorizationRequired' ||
-                error?.code === 'DisabledClient' ||
-                error?.code === 'InvalidToken'
+                (error?.code === 'AuthorizationRequired' ||
+                    error?.code === 'DisabledClient' ||
+                    error?.code === 'InvalidToken') &&
+                (isAuthorized || client?.is_logged_in)
             ) {
                 await oAuthLogout();
+                return;
             }
 
-            if (msg_type === 'balance' && data && !error) {
-                // Transform new API response to backwards-compatible format
+            if (msg_type === 'balance' && data && !error && client) {
                 const transformedData = transformBalanceResponse(data);
                 const balance = transformedData.balance;
-                if (balance?.accounts) {
-                    client.setAllAccountsBalance(balance);
-                } else if (balance?.loginid) {
-                    if (!client?.all_accounts_balance?.accounts || !balance?.loginid) return;
-                    const accounts = { ...client.all_accounts_balance.accounts };
-                    const currentLoggedInBalance = { ...accounts[balance.loginid] };
-                    currentLoggedInBalance.balance = balance.balance;
+                const resolvedLoginid = balance?.loginid || activeLoginid;
 
-                    const updatedAccounts = {
-                        ...client.all_accounts_balance,
-                        accounts: {
-                            ...client.all_accounts_balance.accounts,
-                            [balance.loginid]: currentLoggedInBalance,
-                        },
+                if (balance?.accounts && balance?.loginid) {
+                    const mergedAccounts = {
+                        ...(client.all_accounts_balance?.accounts ?? {}),
+                        ...balance.accounts,
                     };
-                    client.setAllAccountsBalance(updatedAccounts);
+                    client.setAllAccountsBalance({
+                        ...balance,
+                        accounts: mergedAccounts,
+                    });
+                } else if (resolvedLoginid && balance?.balance !== undefined) {
+                    const existingAccounts = client.all_accounts_balance?.accounts ?? {};
+                    const currentAccountEntry = existingAccounts[resolvedLoginid] ?? {
+                        currency: balance.currency || client.currency || 'USD',
+                        demo_account: 0,
+                        type: 'deriv',
+                    };
+                    client.setAllAccountsBalance({
+                        ...(client.all_accounts_balance ?? {}),
+                        balance: balance.balance,
+                        currency: balance.currency || currentAccountEntry.currency,
+                        loginid: resolvedLoginid,
+                        accounts: {
+                            ...existingAccounts,
+                            [resolvedLoginid]: {
+                                ...currentAccountEntry,
+                                balance: Number(balance.balance),
+                                currency: balance.currency || currentAccountEntry.currency,
+                            },
+                        },
+                    } as any);
                 }
             }
         },
-        [client, oAuthLogout]
+        [activeLoginid, client, isAuthorized, oAuthLogout]
     );
 
     useEffect(() => {
-        if (!isAuthorizing && client) {
+        // Only subscribe to private balance stream when authenticated!
+        // Subscribing on the public WebSocket triggers AuthorizationRequired.
+        if (!isAuthorizing && isAuthorized && client) {
             let subId: string | null = null;
             let cancelled = false;
 
             const cb = (transformedData: any) => {
-                // Wrap to reuse existing handleMessages which expects { data }
                 handleMessages({ data: transformedData });
             };
 
             (async () => {
                 try {
                     subId = await api_base.subscribeTo({ balance: 1, account: 'all' }, cb as any);
-                    if (cancelled && subId) await api_base.unsubscribeById(subId);
-                    if (subId) msg_listener.current = { unsubscribe: () => api_base.unsubscribeById(subId) };
+                    if (cancelled && subId) {
+                        await api_base.unsubscribeById(subId);
+                        return;
+                    }
+                    if (subId) {
+                        msg_listener.current = { unsubscribe: () => api_base.unsubscribeById(subId!) };
+                    }
                 } catch (e) {
                     console.warn('[CoreStoreProvider] subscribeTo balance listener failed', e);
                 }
             })();
+
+            return () => {
+                cancelled = true;
+                if (msg_listener.current) {
+                    msg_listener.current.unsubscribe?.();
+                    msg_listener.current = null;
+                }
+            };
         }
 
         return () => {
             if (msg_listener.current) {
                 msg_listener.current.unsubscribe?.();
+                msg_listener.current = null;
             }
         };
     }, [connectionStatus, handleMessages, isAuthorizing, isAuthorized, client]);
@@ -186,38 +253,56 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     useEffect(() => {
         if (!isAuthorizing && isAuthorized && !accountInitialization.current && client) {
             accountInitialization.current = true;
-            api_base.api.getSettings().then((settingRes: TSocketResponseData<'get_settings'>) => {
-                client?.setAccountSettings(settingRes.get_settings);
-                const client_information: TClientInformation = {
-                    loginid: activeAccount?.loginid,
-                    email: settingRes.get_settings?.email,
-                    currency: client?.currency,
-                    residence: settingRes.get_settings?.residence,
-                    first_name: settingRes.get_settings?.first_name,
-                    last_name: settingRes.get_settings?.last_name,
-                    preferred_language: settingRes.get_settings?.preferred_language,
-                    user_id: ((api_base.account_info as any)?.user_id as number) || activeLoginid,
-                    landing_company_shortcode: activeAccount?.landing_company_name,
-                };
+            api_base.api
+                ?.getSettings?.()
+                .then((settingRes: TSocketResponseData<'get_settings'>) => {
+                    if (!settingRes?.get_settings) return;
+                    client?.setAccountSettings(settingRes.get_settings);
+                    const client_information: TClientInformation = {
+                        loginid: activeAccount?.loginid,
+                        email: settingRes.get_settings?.email,
+                        currency: client?.currency,
+                        residence: settingRes.get_settings?.residence,
+                        first_name: settingRes.get_settings?.first_name,
+                        last_name: settingRes.get_settings?.last_name,
+                        preferred_language: settingRes.get_settings?.preferred_language,
+                        user_id: ((api_base.account_info as any)?.user_id as number) || activeLoginid,
+                        landing_company_shortcode: activeAccount?.landing_company_name,
+                    };
 
-                Cookies.set('client_information', JSON.stringify(client_information), {
-                    domain: currentDomain,
+                    Cookies.set('client_information', JSON.stringify(client_information), {
+                        domain: currentDomain,
+                    });
+
+                    if (settingRes.get_settings?.country_code) {
+                        api_base.api
+                            ?.landingCompany?.({
+                                landing_company: settingRes.get_settings.country_code,
+                            })
+                            .then((res: TSocketResponseData<'landing_company'>) => {
+                                if (res?.landing_company) {
+                                    client?.setLandingCompany(res.landing_company as unknown as TLandingCompany);
+                                }
+                            })
+                            .catch(() => undefined);
+                    }
+                })
+                .catch(() => {
+                    // get_settings is optional / unavailable on New Options WS
                 });
 
-                api_base.api
-                    .landingCompany({
-                        landing_company: settingRes.get_settings?.country_code,
-                    })
-                    .then((res: TSocketResponseData<'landing_company'>) => {
-                        client?.setLandingCompany(res.landing_company as unknown as TLandingCompany);
-                    });
-            });
-
-            api_base.api.getAccountStatus().then((res: TSocketResponseData<'get_account_status'>) => {
-                client?.setAccountStatus(res.get_account_status);
-            });
+            api_base.api
+                ?.getAccountStatus?.()
+                .then((res: TSocketResponseData<'get_account_status'>) => {
+                    if (res?.get_account_status) {
+                        client?.setAccountStatus(res.get_account_status);
+                    }
+                })
+                .catch(() => {
+                    // get_account_status is optional / unavailable on New Options WS
+                });
         }
-    }, [isAuthorizing, isAuthorized, client]);
+    }, [activeAccount, activeLoginid, client, currentDomain, isAuthorizing, isAuthorized]);
 
     return <>{children}</>;
 });
