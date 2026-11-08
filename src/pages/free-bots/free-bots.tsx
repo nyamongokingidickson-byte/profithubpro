@@ -5,7 +5,7 @@ import Text from '@/components/shared_ui/text';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { useStore } from '@/hooks/useStore';
 import { localize } from '@deriv-com/translations';
-import { getBotsManifest, prefetchAllXmlInBackground, fetchXmlWithCache } from '@/utils/freebots-cache';
+import { getBotsManifest, fetchXmlWithCache, isValidBotXml } from '@/utils/freebots-cache';
 import { FREE_BOTS_DATA } from './free-bots-data';
 import './free-bots.scss';
 
@@ -28,23 +28,14 @@ const FreeBots = observer(() => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Manifest-driven list for instant load and prefetch
+    // Manifest-driven list matching real XML bots in public/xml/
     const getXmlFiles = () => {
         return [
-            '$DollarprinterbotOrignal$.xml',
-            '360 PRINTER BOT____ [ Version 2.2 ].xml',
-            'Candle-Mine Version 2  (2).xml',
-            'DIFFERS KILLER BOT.xml',
-            'Digits Switcher Bot.xml',
-            'DOLLAR  HUNTER BOT ORIGINAL UPDATED.xml',
-            'Legoo-sniper-bot.xml',
-            'MKOREAN SV6 BOT (1).xml',
-            'Marvel PRO Fully Auto V 2.0  [Original] by {www.360tradinghub.co.ke}.xml',
-            'Marvel SPLIT Version by 360 Trading Hub.xml',
-            "Mathews' speed bot.xml",
-            'Printed_dollars_Bot.xml',
-            'TC Bot 1.1.xml',
-            'legoospeedbot.xml',
+            { name: '$DollarprinterbotOrignal$', file: '$DollarprinterbotOrignal$.xml' },
+            { name: 'Candle-Mine Version 2 (2)', file: 'Candle-Mine Version 2  (2).xml' },
+            { name: 'EVEN/ODD SPEED EXECUTOR BOT', file: 'MKOREAN SV6 BOT (1).xml' },
+            { name: 'Printed Dollars Bot', file: 'Printed_dollars_Bot.xml' },
+            { name: 'SPEEDBOT ACCOUNT FLIPPER', file: 'legoospeedbot.xml' },
         ];
     };
 
@@ -110,8 +101,8 @@ const FreeBots = observer(() => {
 
             setError(null);
 
-            // 0) Immediately render skeleton cards from a small fallback list
-            const fallback = getXmlFiles().map(file => ({ name: file.replace('.xml', ''), file }));
+            // 0) Immediately render skeleton cards from real manifest defaults + Pro Bots
+            const fallback = getXmlFiles();
             const initialSkeleton: BotData[] = fallback.map(item => ({
                 name: (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' '),
                 description: `Advanced trading bot: ${(item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ')}`,
@@ -125,8 +116,8 @@ const FreeBots = observer(() => {
             setIsLoading(false); // hide "Loading free bots..." right away
 
             try {
-                // 1) Fetch manifest with timeout; fallback to initial list if slow
-                const withTimeout = <T,>(p: Promise<T>, ms = 800): Promise<T | null> =>
+                // 1) Fetch manifest with generous timeout; fallback to initial list if slow
+                const withTimeout = <T,>(p: Promise<T>, ms = 4000): Promise<T | null> =>
                     new Promise(resolve => {
                         const t = setTimeout(() => resolve(null), ms);
                         p.then(r => {
@@ -138,9 +129,9 @@ const FreeBots = observer(() => {
                         });
                     });
 
-                const manifest = (await withTimeout(getBotsManifest(), 800)) || fallback;
+                const manifest = (await withTimeout(getBotsManifest(), 4000)) || fallback;
 
-                // 2) If manifest differs, update skeletons to match
+                // 2) Update skeletons to match resolved manifest
                 const skeletonBots: BotData[] = manifest.map(item => ({
                     name: (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' '),
                     description: `Advanced trading bot: ${(item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ')}`,
@@ -151,54 +142,67 @@ const FreeBots = observer(() => {
                 }));
                 setAvailableBots([...skeletonBots, ...proSkeletons]);
 
-                // 3) Load XMLs progressively in background
-                const loadedBots: BotData[] = [];
-                for (let i = 0; i < manifest.length; i++) {
-                    const item = manifest[i];
-                    try {
-                        const xml = await fetchXmlWithCache(item.file);
-                        if (xml) {
-                            const botName = (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ');
-                            loadedBots.push({
-                                name: botName,
-                                description: `Advanced trading bot: ${botName}`,
-                                difficulty: 'Intermediate',
-                                strategy: 'Multi-Strategy',
-                                features: DEFAULT_FEATURES,
-                                xml,
-                            });
-                            setAvailableBots([...loadedBots, ...skeletonBots.slice(loadedBots.length), ...proSkeletons]);
+                // 3) Load manifest XMLs concurrently
+                const manifestResults = await Promise.all(
+                    manifest.map(async item => {
+                        try {
+                            const xml = await fetchXmlWithCache(item.file);
+                            if (isValidBotXml(xml)) {
+                                const botName = (item.name || item.file.replace('.xml', '')).replace(/[_-]/g, ' ');
+                                return {
+                                    name: botName,
+                                    description: `Advanced trading bot: ${botName}`,
+                                    difficulty: 'Intermediate',
+                                    strategy: 'Multi-Strategy',
+                                    features: DEFAULT_FEATURES,
+                                    xml,
+                                } as BotData;
+                            }
+                        } catch (err) {
+                            console.warn(`Failed to load ${item.file}:`, err);
                         }
-                    } catch (err) {
-                        console.warn(`Failed to load ${item.file}:`, err);
-                    }
-                }
+                        return null;
+                    })
+                );
+                const loadedBots = manifestResults.filter((b): b is BotData => b !== null);
+                setAvailableBots([...loadedBots, ...proSkeletons]);
 
+                // 4) Load Pro XML bots in fast parallel batches of 6
                 const loadedProBots: BotData[] = [];
-                for (let i = 0; i < FREE_BOTS_DATA.length; i++) {
-                    const bot = FREE_BOTS_DATA[i];
-                    try {
-                        const response = await fetch(getPublicPath(bot.xmlPath));
-                        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-                        const xml = await response.text();
-                        loadedProBots.push({
-                            name: bot.name,
-                            description: bot.description,
-                            difficulty: bot.isPremium ? 'Premium' : 'Standard',
-                            strategy: bot.category,
-                            features: [bot.category, bot.isPremium ? 'Pro XML Bot' : 'Free XML Bot', 'Bot Builder Ready'],
-                            xml,
-                            xmlPath: bot.xmlPath,
-                        });
-                        setAvailableBots([
-                            ...loadedBots,
-                            ...skeletonBots.slice(loadedBots.length),
-                            ...loadedProBots,
-                            ...proSkeletons.slice(loadedProBots.length),
-                        ]);
-                    } catch (err) {
-                        console.warn(`Failed to load pro free bot ${bot.xmlPath}:`, err);
-                    }
+                const batchSize = 6;
+                for (let i = 0; i < FREE_BOTS_DATA.length; i += batchSize) {
+                    const batch = FREE_BOTS_DATA.slice(i, i + batchSize);
+                    const batchLoaded = await Promise.all(
+                        batch.map(async bot => {
+                            try {
+                                const response = await fetch(getPublicPath(bot.xmlPath));
+                                if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+                                const xml = await response.text();
+                                if (!isValidBotXml(xml)) {
+                                    throw new Error('Invalid XML returned for bot');
+                                }
+                                return {
+                                    name: bot.name,
+                                    description: bot.description,
+                                    difficulty: bot.isPremium ? 'Premium' : 'Standard',
+                                    strategy: bot.category,
+                                    features: [
+                                        bot.category,
+                                        bot.isPremium ? 'Pro XML Bot' : 'Free XML Bot',
+                                        'Bot Builder Ready',
+                                    ],
+                                    xml,
+                                    xmlPath: bot.xmlPath,
+                                } as BotData;
+                            } catch (err) {
+                                console.warn(`Failed to load pro free bot ${bot.xmlPath}:`, err);
+                                return null;
+                            }
+                        })
+                    );
+                    loadedProBots.push(...batchLoaded.filter((b): b is BotData => b !== null));
+                    const remainingSkeletons = proSkeletons.slice(Math.min(i + batchSize, proSkeletons.length));
+                    setAvailableBots([...loadedBots, ...loadedProBots, ...remainingSkeletons]);
                 }
             } catch (error) {
                 console.error('Error loading bots:', error);

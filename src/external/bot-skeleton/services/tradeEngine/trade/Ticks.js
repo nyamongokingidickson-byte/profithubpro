@@ -153,6 +153,51 @@ export default Engine =>
             return Math.round(pct);
         }
 
+        async getDigitByRank(rank = 1, tickCount = 100) {
+            const list = await this.getLastDigitList();
+            const digits = list.slice(-Math.max(1, Number(tickCount) || 100));
+            const frequency = Array.from({ length: 10 }, (_, digit) => ({
+                digit,
+                count: digits.filter(d => Number(d) === digit).length,
+            }));
+            frequency.sort((a, b) => a.count - b.count);
+            const idx = Math.min(9, Math.max(0, (Number(rank) || 1) - 1));
+            return frequency[idx].digit;
+        }
+
+        async getAnalysisPower(target = 'OVER') {
+            const list = await this.getLastDigitList();
+            const lastN = list.slice(-100);
+            if (!lastN.length) return 50;
+            const matches = lastN.filter(raw => {
+                const d = Number(raw);
+                if (target === 'OVER') return d >= 5;
+                if (target === 'UNDER') return d < 5;
+                if (target === 'EVEN') return d % 2 === 0;
+                if (target === 'ODD') return d % 2 !== 0;
+                return false;
+            }).length;
+            return Math.round((matches / lastN.length) * 100);
+        }
+
+        async isAnalysisIncreasing(target = 'OVER') {
+            const list = await this.getLastDigitList();
+            if (list.length < 20) return false;
+            const matchesTarget = raw => {
+                const d = Number(raw);
+                if (target === 'OVER') return d >= 5;
+                if (target === 'UNDER') return d < 5;
+                if (target === 'EVEN') return d % 2 === 0;
+                if (target === 'ODD') return d % 2 !== 0;
+                return false;
+            };
+            const last10 = list.slice(-10);
+            const last50 = list.slice(-50);
+            const recentPct = last10.filter(matchesTarget).length / last10.length;
+            const baselinePct = last50.filter(matchesTarget).length / last50.length;
+            return recentPct > baselinePct;
+        }
+
         checkDirection(dir) {
             return new Promise(resolve =>
                 this.$scope.ticksService

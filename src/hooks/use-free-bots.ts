@@ -15,16 +15,22 @@ export const useFreeBots = () => {
         async (bot: (typeof FREE_BOTS_DATA)[0]) => {
             setIsLoading(true);
             try {
-                // Fetch the XML from the server or local path
-                const response = await fetch(bot.xmlPath);
+                // Fetch the XML from the server or local path (properly URL-encoded)
+                const publicPath = `/${bot.xmlPath
+                    .replace(/^\/+/, '')
+                    .split('/')
+                    .map(part => encodeURIComponent(part))
+                    .join('/')}`;
+                const response = await fetch(publicPath);
                 if (!response.ok) {
                     throw new Error(`Failed to fetch bot XML: ${response.status} ${response.statusText}`);
                 }
 
                 const xmlString = await response.text();
 
-                // Validate that we actually got XML content
-                if (!xmlString || !xmlString.trim().startsWith('<')) {
+                // Validate that we actually got XML content (not SPA HTML fallback)
+                const trimmedXml = xmlString?.trim() || '';
+                if (!trimmedXml.startsWith('<xml') && !trimmedXml.startsWith('<?xml')) {
                     throw new Error('Invalid XML content received');
                 }
 

@@ -11,7 +11,15 @@ export type TBotsManifestItem = {
     features?: string[];
 };
 
-const XML_CACHE_PREFIX = 'freebots:xml:';
+const XML_CACHE_PREFIX = 'freebots:xml:v2:';
+
+export const isValidBotXml = (xml: string | null | undefined): xml is string => {
+    if (!xml || typeof xml !== 'string') return false;
+    const trimmed = xml.trim();
+    if (!trimmed.startsWith('<xml') && !trimmed.startsWith('<?xml')) return false;
+    if (/^<!doctype\s+html/i.test(trimmed) || /^<html/i.test(trimmed)) return false;
+    return trimmed.includes('<block');
+};
 
 // In-memory cache for faster access
 const memoryCache = new Map<string, string>();
@@ -56,29 +64,41 @@ export const setCachedXml = async (file: string, xml: string) => {
 export const fetchXmlWithCache = async (file: string): Promise<string | null> => {
     // Check memory cache first
     if (memoryCache.has(file)) {
-        return memoryCache.get(file)!;
+        const mem = memoryCache.get(file)!;
+        if (isValidBotXml(mem)) return mem;
+        memoryCache.delete(file);
     }
 
     // Check persistent cache
     const cached = await getCachedXml(file);
     if (cached) {
-        memoryCache.set(file, cached); // Store in memory for faster access
-        return cached;
+        if (isValidBotXml(cached)) {
+            memoryCache.set(file, cached); // Store in memory for faster access
+            return cached;
+        }
+        try {
+            await localforage.removeItem(`${XML_CACHE_PREFIX}${file}`);
+        } catch {
+            // ignore cache eviction errors
+        }
     }
 
     try {
         // 1) Try domain-specific base (set after manifest) else default /xml/
         const primaryUrl = `${getXmlBase()}${encodeURIComponent(file)}`;
         let res = await fetch(primaryUrl);
+        let xml = res.ok ? await res.text() : '';
 
-        // 2) Fallback: try default /xml/ if domain-specific path 404s
-        if (!res.ok) {
+        // 2) Fallback: try default /xml/ if domain-specific path 404s or returned SPA HTML fallback
+        if (!res.ok || !isValidBotXml(xml)) {
             const fallbackUrl = `/xml/${encodeURIComponent(file)}`;
             res = await fetch(fallbackUrl);
+            xml = res.ok ? await res.text() : '';
         }
 
-        if (!res.ok) throw new Error(`Failed to fetch ${file}: ${res.status}`);
-        const xml = await res.text();
+        if (!res.ok || !isValidBotXml(xml)) {
+            throw new Error(`Failed to fetch valid bot XML for ${file}: ${res.status}`);
+        }
 
         // Store in both caches
         memoryCache.set(file, xml);

@@ -305,21 +305,33 @@ export const doUntilDone = (promiseFn, errors_to_ignore, api_base) => {
 };
 
 export const createDetails = contract => {
-    const { sell_price: sellPrice, buy_price: buyPrice, currency } = contract;
-    const profit = getRoundedNumber(sellPrice - buyPrice, currency);
+    const sellPrice = Number(contract?.sell_price ?? contract?.bid_price ?? 0);
+    const buyPrice = Number(contract?.buy_price ?? 0);
+    const currency = contract?.currency || 'USD';
+    const rawProfit =
+        contract?.profit !== undefined && contract?.profit !== null
+            ? Number(contract.profit)
+            : sellPrice - buyPrice;
+    const profit = getRoundedNumber(rawProfit, currency);
     const result = profit < 0 ? 'loss' : 'win';
 
+    const entryTimeSec = contract?.entry_tick_time ?? contract?.entry_spot_time ?? contract?.date_start ?? 0;
+    const exitTimeSec =
+        contract?.exit_tick_time ?? contract?.exit_spot_time ?? contract?.sell_spot_time ?? contract?.sell_time ?? 0;
+    const entryTickVal = contract?.entry_tick ?? contract?.entry_spot ?? 0;
+    const exitTickVal = contract?.exit_tick ?? contract?.exit_spot ?? contract?.sell_spot ?? contract?.current_spot ?? 0;
+
     return [
-        contract.transaction_ids.buy,
-        +contract.buy_price,
-        +contract.sell_price,
+        contract?.transaction_ids?.buy ?? contract?.contract_id,
+        buyPrice,
+        sellPrice,
         profit,
-        contract.contract_type,
-        formatTime(parseInt(`${contract.entry_tick_time}000`), 'HH:mm:ss'),
-        +contract.entry_tick,
-        formatTime(parseInt(`${contract.exit_tick_time}000`), 'HH:mm:ss'),
-        +contract.exit_tick,
-        +(contract.barrier ? contract.barrier : 0),
+        contract?.contract_type,
+        entryTimeSec ? formatTime(parseInt(`${entryTimeSec}000`), 'HH:mm:ss') : '',
+        +entryTickVal,
+        exitTimeSec ? formatTime(parseInt(`${exitTimeSec}000`), 'HH:mm:ss') : '',
+        +exitTickVal,
+        +(contract?.barrier ? contract.barrier : 0),
         result,
     ];
 };

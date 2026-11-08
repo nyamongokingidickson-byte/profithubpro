@@ -131,16 +131,69 @@ export const transformTransactionRequest = (
     return newRequest;
 };
 
+const stripUndefined = <T extends Record<string, any>>(obj: T): T => {
+    const cleaned: Record<string, any> = {};
+    Object.keys(obj).forEach(key => {
+        if (obj[key] !== undefined) {
+            cleaned[key] = obj[key];
+        }
+    });
+    return cleaned as T;
+};
+
 /**
  * Transform legacy buy request to new API format
- * Removes: loginid parameter
+ * Removes: loginid, passthrough; normalizes direct buy parameters (symbol → underlying_symbol, string barrier, selected_tick)
  */
 export const transformBuyRequest = (
     legacyRequest: any
 ): any => {
-    const { loginid, ...newRequest } = legacyRequest;
-    
-    return newRequest;
+    const { loginid, passthrough, parameters, ...rest } = legacyRequest;
+
+    const normalizedPrice =
+        rest.price !== undefined && Number.isFinite(Number(rest.price)) ? Number(rest.price) : rest.price;
+
+    if (!parameters || typeof parameters !== 'object') {
+        return stripUndefined({
+            ...rest,
+            ...(normalizedPrice !== undefined ? { price: normalizedPrice } : {}),
+        });
+    }
+
+    const {
+        symbol,
+        underlying_symbol,
+        loginid: _paramLoginId,
+        passthrough: _paramPassthrough,
+        app_markup_percentage,
+        barrier_range,
+        product_type,
+        date_start,
+        trade_risk_profile,
+        trading_period_start,
+        barrier,
+        barrier2,
+        selected_tick,
+        ...restParams
+    } = parameters;
+
+    const contractType = restParams.contract_type;
+    const isHighLowTick = ['TICKHIGH', 'TICKLOW'].includes(contractType);
+    const resolvedUnderlying = underlying_symbol ?? symbol;
+
+    const normalizedParams = stripUndefined({
+        ...restParams,
+        ...(resolvedUnderlying ? { underlying_symbol: resolvedUnderlying } : {}),
+        ...(isHighLowTick && selected_tick !== undefined ? { selected_tick: Number(selected_tick) } : {}),
+        ...(!isHighLowTick && barrier !== undefined && barrier !== null ? { barrier: String(barrier) } : {}),
+        ...(!isHighLowTick && barrier2 !== undefined && barrier2 !== null ? { barrier2: String(barrier2) } : {}),
+    });
+
+    return stripUndefined({
+        ...rest,
+        ...(normalizedPrice !== undefined ? { price: normalizedPrice } : {}),
+        parameters: normalizedParams,
+    });
 };
 
 /**
@@ -181,27 +234,39 @@ export const transformContractUpdateHistoryRequest = (
 
 /**
  * Transform legacy proposal request to new API format
- * Changes: symbol → underlying_symbol
- * Removes: loginid, barrier_range, product_type, date_start, trade_risk_profile, trading_period_start
+ * Changes: symbol → underlying_symbol, barrier → string, strips selected_tick for non-tickhigh/low
+ * Removes: passthrough, loginid, barrier_range, product_type, date_start, trade_risk_profile, trading_period_start
  */
 export const transformProposalRequest = (
     legacyRequest: any
 ): any => {
     const {
         symbol,
+        underlying_symbol,
+        passthrough,
         loginid,
         barrier_range,
         product_type,
         date_start,
         trade_risk_profile,
         trading_period_start,
+        barrier,
+        barrier2,
+        selected_tick,
         ...newRequest
     } = legacyRequest;
-    
-    return {
+
+    const contractType = newRequest.contract_type;
+    const isHighLowTick = ['TICKHIGH', 'TICKLOW'].includes(contractType);
+    const resolvedUnderlying = underlying_symbol ?? symbol;
+
+    return stripUndefined({
         ...newRequest,
-        ...(symbol && { underlying_symbol: symbol }),
-    };
+        ...(resolvedUnderlying ? { underlying_symbol: resolvedUnderlying } : {}),
+        ...(isHighLowTick && selected_tick !== undefined ? { selected_tick: Number(selected_tick) } : {}),
+        ...(!isHighLowTick && barrier !== undefined && barrier !== null ? { barrier: String(barrier) } : {}),
+        ...(!isHighLowTick && barrier2 !== undefined && barrier2 !== null ? { barrier2: String(barrier2) } : {}),
+    });
 };
 
 /**
@@ -514,38 +579,102 @@ export const transformProposalResponse = (
 };
 
 /**
+ * Transform new buy response
+ * Normalizes numeric strings and ensures transaction_id is always populated
+ */
+export const transformBuyResponse = (
+    newResponse: any
+): any => {
+    if (!newResponse.buy) return newResponse;
+
+    const { buy } = newResponse;
+    const toNum = (val: any) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : val);
+
+    return {
+        ...newResponse,
+        buy: {
+            ...buy,
+            buy_price: toNum(buy.buy_price),
+            payout: toNum(buy.payout),
+            balance_after: toNum(buy.balance_after),
+            transaction_id: buy.transaction_id ?? buy.contract_id,
+            longcode: buy.longcode ?? '',
+        },
+    };
+};
+
+/**
  * Transform new proposal_open_contract response
- * Handle string | number fields and deprecated fields
+ * Handle string | number fields and deprecated fields required by Bot Engine & Summary/Transactions UI
  */
 export const transformProposalOpenContractResponse = (
     newResponse: any
 ): any => {
     if (!newResponse.proposal_open_contract) return newResponse;
     
-    const { proposal_open_contract } = newResponse;
-    
+    const { proposal_open_contract: poc } = newResponse;
+    const toNum = (val: any) => (typeof val === 'string' && val.trim() !== '' ? parseFloat(val) : val);
+
+    const buyPrice = toNum(poc.buy_price);
+    const bidPrice = toNum(poc.bid_price);
+    const rawSellPrice = toNum(poc.sell_price);
+    const profit = toNum(poc.profit);
+    const payout = toNum(poc.payout);
+    const currentSpot = toNum(poc.current_spot);
+    const entrySpot = toNum(poc.entry_tick ?? poc.entry_spot);
+    const exitSpot = toNum(poc.exit_tick ?? poc.exit_spot ?? poc.sell_spot);
+
+    const isSold = Boolean(
+        poc.is_sold ||
+            poc.status === 'sold' ||
+            poc.status === 'won' ||
+            poc.status === 'lost'
+    );
+
+    const resolvedSellPrice =
+        rawSellPrice !== undefined
+            ? rawSellPrice
+            : isSold && typeof buyPrice === 'number' && typeof profit === 'number'
+              ? buyPrice + profit
+              : isSold && typeof bidPrice === 'number'
+                ? bidPrice
+                : rawSellPrice;
+
+    const resolvedSymbol = poc.symbol ?? poc.underlying_symbol ?? poc.underlying;
+    const existingTxIds = poc.transaction_ids ?? {};
+    const resolvedTxIds = {
+        ...existingTxIds,
+        buy: existingTxIds.buy ?? poc.transaction_id ?? poc.contract_id,
+        ...(existingTxIds.sell
+            ? { sell: existingTxIds.sell }
+            : isSold
+              ? { sell: poc.sell_transaction ?? poc.contract_id }
+              : {}),
+    };
+
     return {
         ...newResponse,
         proposal_open_contract: {
-            ...proposal_open_contract,
-            bid_price: typeof proposal_open_contract.bid_price === 'string' 
-                ? parseFloat(proposal_open_contract.bid_price) 
-                : proposal_open_contract.bid_price,
-            buy_price: typeof proposal_open_contract.buy_price === 'string' 
-                ? parseFloat(proposal_open_contract.buy_price) 
-                : proposal_open_contract.buy_price,
-            current_spot: typeof proposal_open_contract.current_spot === 'string' 
-                ? parseFloat(proposal_open_contract.current_spot) 
-                : proposal_open_contract.current_spot,
-            profit: typeof proposal_open_contract.profit === 'string' 
-                ? parseFloat(proposal_open_contract.profit) 
-                : proposal_open_contract.profit,
-            payout: typeof proposal_open_contract.payout === 'string' 
-                ? parseFloat(proposal_open_contract.payout) 
-                : proposal_open_contract.payout,
-            // Map new field names to legacy for backwards compatibility
-            exit_spot: proposal_open_contract.exit_spot ?? proposal_open_contract.sell_spot,
-            exit_spot_time: proposal_open_contract.exit_spot_time ?? proposal_open_contract.sell_spot_time,
+            ...poc,
+            symbol: resolvedSymbol,
+            underlying: poc.underlying ?? resolvedSymbol,
+            underlying_symbol: poc.underlying_symbol ?? resolvedSymbol,
+            bid_price: bidPrice,
+            buy_price: buyPrice,
+            sell_price: resolvedSellPrice,
+            current_spot: currentSpot,
+            profit,
+            payout,
+            is_sold: isSold ? 1 : 0,
+            entry_spot: entrySpot,
+            entry_tick: entrySpot,
+            entry_tick_display_value: poc.entry_tick_display_value ?? poc.entry_spot_display_value ?? (entrySpot !== undefined ? String(entrySpot) : undefined),
+            entry_tick_time: poc.entry_tick_time ?? poc.entry_spot_time ?? poc.date_start,
+            exit_spot: exitSpot,
+            exit_tick: exitSpot ?? (isSold ? currentSpot : undefined),
+            exit_tick_display_value: poc.exit_tick_display_value ?? poc.exit_spot_display_value ?? poc.sell_spot_display_value ?? (exitSpot !== undefined ? String(exitSpot) : undefined),
+            exit_tick_time: poc.exit_tick_time ?? poc.exit_spot_time ?? poc.sell_spot_time ?? poc.sell_time,
+            transaction_ids: resolvedTxIds,
         },
     };
 };
@@ -623,6 +752,8 @@ export const transformResponse = (
             return transformPortfolioResponse(response);
         case 'transaction':
             return transformTransactionResponse(response);
+        case 'buy':
+            return transformBuyResponse(response);
         case 'proposal':
             return transformProposalResponse(response);
         case 'proposal_open_contract':

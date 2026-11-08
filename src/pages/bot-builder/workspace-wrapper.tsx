@@ -12,7 +12,7 @@ import './workspace.scss';
 
 const WorkspaceWrapper = observer(({ onOpenScanner }: { onOpenScanner?: () => void }) => {
     const { blockly_store, dashboard } = useStore();
-    const { onMount, onUnmount, is_loading } = blockly_store;
+    const { onMount, onUnmount, is_loading, is_workspace_ready, setContainerSize } = blockly_store;
     const { pending_free_bot, clearPendingFreeBot, setOpenSettings } = dashboard;
 
     // Track if we've already processed a pending bot to prevent duplicates
@@ -37,21 +37,23 @@ const WorkspaceWrapper = observer(({ onOpenScanner }: { onOpenScanner?: () => vo
     // When workspace becomes available and a Free Bots handoff exists, load it once
     React.useEffect(() => {
         const maybeLoadPending = async () => {
+            const workspace = window.Blockly?.derivWorkspace;
+            const botKey = pending_free_bot ? `${pending_free_bot.name}:${pending_free_bot.xml.length}` : null;
             // Only proceed if we have a workspace, pending bot, and haven't processed this bot yet
             if (
-                window.Blockly?.derivWorkspace &&
+                workspace &&
                 pending_free_bot?.xml &&
                 !is_loading &&
-                processedBotRef.current !== pending_free_bot.name
+                processedBotRef.current !== botKey
             ) {
                 // Mark this bot as being processed to prevent duplicates
-                processedBotRef.current = pending_free_bot.name;
+                processedBotRef.current = botKey;
 
                 try {
                     await load({
                         block_string: pending_free_bot.xml,
                         file_name: pending_free_bot.name,
-                        workspace: window.Blockly.derivWorkspace,
+                        workspace,
                         from: save_types.LOCAL,
                         drop_event: {},
                         strategy_id: null,
@@ -60,6 +62,10 @@ const WorkspaceWrapper = observer(({ onOpenScanner }: { onOpenScanner?: () => vo
                     // Show import notification and clear handoff
                     setOpenSettings?.(NOTIFICATION_TYPE.BOT_IMPORT);
                     clearPendingFreeBot();
+                    setTimeout(() => {
+                        setContainerSize();
+                        window.dispatchEvent(new Event('resize'));
+                    }, 50);
 
                     // Reset the processed bot ref after successful load
                     processedBotRef.current = null;
@@ -72,11 +78,11 @@ const WorkspaceWrapper = observer(({ onOpenScanner }: { onOpenScanner?: () => vo
             }
         };
         maybeLoadPending();
-    }, [pending_free_bot?.name, pending_free_bot?.xml, is_loading]);
+    }, [pending_free_bot?.name, pending_free_bot?.xml, is_loading, is_workspace_ready, setContainerSize, clearPendingFreeBot, setOpenSettings]);
 
     if (is_loading) return null;
 
-    if (window.Blockly?.derivWorkspace)
+    if (is_workspace_ready || window.Blockly?.derivWorkspace)
         return (
             <React.Fragment>
                 <Toolbox />

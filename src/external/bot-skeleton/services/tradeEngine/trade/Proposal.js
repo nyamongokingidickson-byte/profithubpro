@@ -64,29 +64,61 @@ export default Engine =>
             // Since there are two proposals (in most cases), an error may be logged twice, to avoid this
             // flip this boolean on error.
             let has_informed_error = false;
+            const current_ref = this.getPurchaseReference();
 
             Promise.all(
                 this.proposal_templates.map(proposal => {
-                    doUntilDone(() => api_base.api.send(proposal)).catch(error => {
-                        // We intercept ContractBuyValidationError as user may have specified
-                        // e.g. a DIGITUNDER 0 or DIGITOVER 9, while one proposal may be invalid
-                        // the other is valid. We will error on Purchase rather than here.
+                    const expected_contract_type = proposal.passthrough?.contract_type || proposal.contract_type;
+                    const expected_reference = proposal.passthrough?.purchase_reference || current_ref;
 
-                        if (error?.error?.code === 'ContractBuyValidationError') {
-                            this.data.proposals.push({
-                                ...error.error.echo_req,
-                                ...error.echo_req.passthrough,
-                                error,
-                            });
-
+                    return doUntilDone(() => api_base.api.send(proposal))
+                        .then(response => {
+                            const resData = response?.data ?? response;
+                            const receivedProposal = resData?.proposal;
+                            if (
+                                receivedProposal &&
+                                this.data.proposals.findIndex(
+                                    p =>
+                                        p.id === receivedProposal.id ||
+                                        (p.contract_type === expected_contract_type &&
+                                            p.purchase_reference === expected_reference)
+                                ) === -1
+                            ) {
+                                this.data.proposals.push({
+                                    ...receivedProposal,
+                                    ...(resData?.passthrough || {}),
+                                    contract_type:
+                                        resData?.passthrough?.contract_type ||
+                                        resData?.echo_req?.contract_type ||
+                                        expected_contract_type,
+                                    purchase_reference:
+                                        resData?.passthrough?.purchase_reference || expected_reference,
+                                });
+                                this.checkProposalReady();
+                            }
+                            return response;
+                        })
+                        .catch(error => {
+                            // We intercept ContractBuyValidationError as user may have specified
+                            // e.g. a DIGITUNDER 0 or DIGITOVER 9, while one proposal may be invalid
+                            // the other is valid. We will error on Purchase rather than here.
+                            if (error?.error?.code === 'ContractBuyValidationError') {
+                                this.data.proposals.push({
+                                    ...(error?.error?.echo_req || error?.echo_req || {}),
+                                    ...(error?.echo_req?.passthrough || proposal.passthrough || {}),
+                                    contract_type: expected_contract_type,
+                                    purchase_reference: expected_reference,
+                                    error,
+                                });
+                                this.checkProposalReady();
+                                return null;
+                            }
+                            if (!has_informed_error) {
+                                has_informed_error = true;
+                                this.$scope.observer.emit('Error', error?.error || error);
+                            }
                             return null;
-                        }
-                        if (!has_informed_error) {
-                            has_informed_error = true;
-                            this.$scope.observer.emit('Error', error.error);
-                        }
-                        return null;
-                    });
+                        });
                 })
             );
         }
@@ -94,11 +126,27 @@ export default Engine =>
         observeProposals() {
             if (!api_base.api) return;
             const subscription = api_base.api.onMessage().subscribe(response => {
-                if (response.data.msg_type === 'proposal') {
-                    const { passthrough, proposal } = response.data;
-                    if (proposal && this.data.proposals.findIndex(p => p.id === proposal.id) === -1) {
-                        // Add proposals based on the ID returned by the API.
-                        this.data.proposals.push({ ...proposal, ...passthrough });
+                if (response?.data?.msg_type === 'proposal') {
+                    const { passthrough, proposal, echo_req } = response.data;
+                    const resolvedContractType =
+                        passthrough?.contract_type || echo_req?.contract_type || proposal?.contract_type;
+                    const resolvedRef = passthrough?.purchase_reference || this.getPurchaseReference();
+
+                    if (
+                        proposal &&
+                        resolvedContractType &&
+                        this.data.proposals.findIndex(
+                            p =>
+                                p.id === proposal.id ||
+                                (p.contract_type === resolvedContractType && p.purchase_reference === resolvedRef)
+                        ) === -1
+                    ) {
+                        this.data.proposals.push({
+                            ...proposal,
+                            ...(passthrough || {}),
+                            contract_type: resolvedContractType,
+                            purchase_reference: resolvedRef,
+                        });
                         this.checkProposalReady();
                     }
                 }
