@@ -87,15 +87,15 @@ const AdminOnboardingWizard: React.FC<AdminOnboardingWizardProps> = ({
     const [steps, setSteps] = useState<OnboardingStep[]>(defaultSteps);
     const [config, setConfig] = useState<AdminOnboardingConfig>(
         initialConfig as AdminOnboardingConfig || {
-            siteUrl: 'https://protradershub.vercel.app',
-            clientId: '33mWzWbrexwSx7SoVNSYk',
-            legacyAppId: '113536',
-            redirectUri: '',
+            siteUrl: 'https://dylantrades.site',
+            clientId: '34J0u7zObmeCX5lnl8zm7',
+            legacyAppId: '34J0u7zObmeCX5lnl8zm7',
+            redirectUri: 'https://dylantrades.site/callback',
             authUrl: 'https://oauth.deriv.com/oauth2/authorize',
             tokenUrl: 'https://oauth.deriv.com/oauth2/token',
             revokeUrl: 'https://oauth.deriv.com/oauth2/revoke',
             scopes: ['read', 'trade', 'payments', 'trading_information'],
-            enableLegacyMode: true,
+            enableLegacyMode: false,
         }
     );
     const [selectedScopes, setSelectedScopes] = useState<OAuthScope[]>(config.scopes);

@@ -30,7 +30,7 @@ class DerivApiService {
     private state: ConnectionState = ConnectionState.DISCONNECTED;
 
     private getEndpoint(): string {
-        return getPublicWebSocketURL(Number(this.appId));
+        return getPublicWebSocketURL(this.appId);
     }
     private reconnectAttempts: number = 0;
     private maxReconnectDelay: number = 5000;

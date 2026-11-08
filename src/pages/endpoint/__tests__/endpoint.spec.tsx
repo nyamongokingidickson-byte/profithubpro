@@ -47,7 +47,9 @@ describe('<Endpoint />', () => {
         await userEvent.type(appIdInput, '123');
         await userEvent.click(resetButton);
 
-        expect(localStorage.getItem('config.server_url') ?? '').toBe('ws.derivws.com');
-        expect(localStorage.getItem('config.app_id') ?? '').toBe('126595');
+        expect(localStorage.getItem('config.server_url') ?? '').toBe(
+            'wss://api.derivws.com/trading/v1/options/ws/public?app_id=34J0u7zObmeCX5lnl8zm7'
+        );
+        expect(localStorage.getItem('config.app_id') ?? '').toBe('34J0u7zObmeCX5lnl8zm7');
     });
 });

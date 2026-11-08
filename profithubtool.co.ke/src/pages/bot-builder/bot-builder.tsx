@@ -138,15 +138,15 @@ const BotBuilder = observer(() => {
                         <div
                             className='profithub-minimized-icon'
                             onClick={() => setIsMinimized(false)}
-                            title='Restore Profithub Tool'
+                            title='Restore Dylan Trades Tool'
                         >
-                            <span className='tool-icon'>P</span>
+                            <span className='tool-icon'>D</span>
                         </div>
                     ) : (
                         <div className={classNames('profithub-tool-overlay glass-card', { 'scaled-down': isScaled })}>
                             <div className='profithub-tool-header'>
                                 <span className='tool-title'>
-                                    <Localize i18n_default_text='Profithub Tool' />
+                                    <Localize i18n_default_text='Dylan Trades Tool' />
                                 </span>
                                 <div className='tool-controls'>
                                     <button
@@ -170,7 +170,7 @@ const BotBuilder = observer(() => {
                             </div>
                             <iframe
                                 src='https://v0-profithubtool2026.vercel.app/'
-                                title='Profithub Tool'
+                                title='Dylan Trades Tool'
                                 className='profithub-tool-iframe'
                                 allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
                                 allowFullScreen

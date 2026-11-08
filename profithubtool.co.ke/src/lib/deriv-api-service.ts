@@ -59,7 +59,7 @@ class DerivApiService {
     }
 
     private getEndpoint(): string {
-        return getPublicWebSocketURL(Number(this.appId));
+        return getPublicWebSocketURL(this.appId);
     }
 
     public static getInstance(): DerivApiService {

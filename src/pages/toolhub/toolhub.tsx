@@ -22,7 +22,7 @@ const ProToolHub = observer(() => {
             url: 'https://v0-tool2.vercel.app/',
         },
         expert_analytics: {
-            name: 'Profithub Tool',
+            name: 'Dylan Trades Tool',
             url: 'https://v0-profithubtool2026.vercel.app/',
         },
     };

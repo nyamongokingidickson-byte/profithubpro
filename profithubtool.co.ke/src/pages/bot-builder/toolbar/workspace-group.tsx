@@ -183,7 +183,7 @@ const WorkspaceGroup = observer(() => {
                         }
                     />
                     <ToolbarIcon
-                        popover_message={localize('Profithub Easytool')}
+                        popover_message={localize('Dylan Trades Easytool')}
                         icon={
                             <span className='toolbar__icon' onClick={() => toggleWindow('analysishub')}>
                                 <span style={{ fontSize: '18px', display: 'flex', alignItems: 'center' }}>🌐</span>
@@ -260,7 +260,7 @@ const WorkspaceGroup = observer(() => {
             {openWindows.includes('analysishub') && (
                 <FloatingWindow
                     id='analysishub'
-                    title='Profithub Easytool'
+                    title='Dylan Trades Easytool'
                     onClose={() => closeWindow('analysishub')}
                     onFocus={() => setTopWindow('analysishub')}
                     isTop={topWindow === 'analysishub'}
@@ -272,7 +272,7 @@ const WorkspaceGroup = observer(() => {
                     <iframe
                         src='https://analysisprofithub.vercel.app/'
                         style={{ width: '100%', height: '100%', border: 'none' }}
-                        title='Profithub Easytool'
+                        title='Dylan Trades Easytool'
                     />
                 </FloatingWindow>
             )}

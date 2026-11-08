@@ -31,6 +31,10 @@ const WhatsApp = () => {
             'wallacetraders.site': 'https://whatsapp.com/channel/0029Vb6ngek60eBo02nGKR3T',
             'www.wallacetraders.site': 'https://whatsapp.com/channel/0029Vb6ngek60eBo02nGKR3T',
 
+            // Dylan Trades domain
+            'dylantrades.site': URLConstants.whatsApp,
+            'www.dylantrades.site': URLConstants.whatsApp,
+
             // Other domains use default Deriv WhatsApp
             'kingstraders.site': URLConstants.whatsApp,
             'www.kingstraders.site': URLConstants.whatsApp,

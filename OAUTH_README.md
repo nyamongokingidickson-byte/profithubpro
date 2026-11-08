@@ -14,9 +14,9 @@ The migration includes:
 
 Set these in your Vercel dashboard (Production and Preview):
 
-- `OAUTH_CLIENT_ID`: 33pC7qk8i9WtRbTbSOkcq
-- `LEGACY_APP_ID`: 113536
-- `REDIRECT_URI`: https://profithubpro.vercel.app/callback
+- `OAUTH_CLIENT_ID`: 34J0u7zObmeCX5lnl8zm7
+- `APP_ID`: 34J0u7zObmeCX5lnl8zm7
+- `REDIRECT_URI`: https://dylantrades.site/callback
 - `SESSION_SECRET`: Generate a long random string (e.g., `openssl rand -base64 32`)
 
 ## Local Development
@@ -28,9 +28,9 @@ Set these in your Vercel dashboard (Production and Preview):
 
 2. Set environment variables in `.env`:
    ```
-   OAUTH_CLIENT_ID=33pC7qk8i9WtRbTbSOkcq
-   LEGACY_APP_ID=113536
-   REDIRECT_URI=https://profithubpro.vercel.app/callback
+   OAUTH_CLIENT_ID=34J0u7zObmeCX5lnl8zm7
+   APP_ID=34J0u7zObmeCX5lnl8zm7
+   REDIRECT_URI=https://dylantrades.site/callback
    SESSION_SECRET=your-secret-here
    ```
 
@@ -44,7 +44,7 @@ Set these in your Vercel dashboard (Production and Preview):
 1. Push your code to GitHub
 2. Connect your repository to Vercel
 3. Set the environment variables in Vercel dashboard
-4. Set the production domain to match `REDIRECT_URI` (https://profithubpro.vercel.app/callback)
+4. Set the production domain to match `REDIRECT_URI` (https://dylantrades.site/callback)
 5. Deploy
 
 ## Testing the Flow

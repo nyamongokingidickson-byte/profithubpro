@@ -48,12 +48,12 @@ export default function InitialLoader() {
             <div className='glass-card'>
                 <div className='brand-container'>
                     <div className='logo-mark'>
-                        <span className='logo-letter'>P</span>
+                        <span className='logo-letter'>D</span>
                         <div className='logo-ring'></div>
                     </div>
                     <div className='brand-text'>
-                        <h1 className='main-title'>PROFITHUB</h1>
-                        <span className='sub-title'>TRADERS</span>
+                        <h1 className='main-title'>DYLAN</h1>
+                        <span className='sub-title'>TRADES</span>
                     </div>
                 </div>
 

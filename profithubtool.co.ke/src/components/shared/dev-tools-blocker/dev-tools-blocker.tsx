@@ -51,7 +51,7 @@ const DevToolsBlocker = () => {
                     </div>
                     <div className='badge badge--shield'>
                         <span className='icon'>⚠</span>
-                        <Localize i18n_default_text='PROFITHUB DANGER SHIELD' />
+                        <Localize i18n_default_text='DYLAN TRADES DANGER SHIELD' />
                     </div>
                 </div>
 
@@ -60,7 +60,7 @@ const DevToolsBlocker = () => {
                 </h1>
 
                 <p className='blocker-text'>
-                    <Localize i18n_default_text='Developer tools are blocked on Profithub. Close inspection tools and reload the page to continue.' />
+                    <Localize i18n_default_text='Developer tools are blocked on Dylan Trades. Close inspection tools and reload the page to continue.' />
                 </p>
 
                 <div className='blocker-status'>
@@ -68,7 +68,7 @@ const DevToolsBlocker = () => {
                 </div>
 
                 <div className='blocker-footer'>
-                    <p className='footer-label'><Localize i18n_default_text='Follow Profithub' /></p>
+                    <p className='footer-label'><Localize i18n_default_text='Follow Dylan Trades' /></p>
                     <div className='social-grid'>
                         <a href='#' className='social-item'>
                             <span className='icon'>📷</span>
