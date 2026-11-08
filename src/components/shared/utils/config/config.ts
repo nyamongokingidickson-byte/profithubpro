@@ -164,8 +164,11 @@ export const getSocketURL = () => {
     return getPublicWebSocketURL(getAppId());
 };
 
-export const getPublicWebSocketURL = (appId: number | string) => {
-    return `${DERIV_WS_PUBLIC_URL}?app_id=${appId}`;
+export const getPublicWebSocketURL = (appId?: number | string) => {
+    if (isLegacyModeEnabled() && appId) {
+        return `wss://ws.derivws.com/websockets/v3?app_id=${appId}`;
+    }
+    return DERIV_WS_PUBLIC_URL;
 };
 
 export const getDemoWebSocketURL = (appId: number | string) => {

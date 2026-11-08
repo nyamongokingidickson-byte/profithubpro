@@ -75,36 +75,23 @@ const AppRoot = () => {
         }
     }, []);
 
-    // Effect to check TMB status - independent of API initialization
+    // Check TMB status in background without blocking API initialization
     useEffect(() => {
-        const checkTmbStatus = async () => {
-            try {
-                const tmb_status = await isTmbEnabled();
-                const final_status = tmb_status || window.is_tmb_enabled === true;
-
-                setIsTmbEnabled(final_status);
-
+        isTmbEnabled()
+            .then(tmb_status => {
+                setIsTmbEnabled(tmb_status || window.is_tmb_enabled === true);
                 setIsTmbCheckComplete(true);
-            } catch (error) {
-                console.error('TMB check failed:', error);
+            })
+            .catch(() => {
                 setIsTmbCheckComplete(true);
-            }
-        };
-
-        checkTmbStatus();
+            });
     }, []);
 
-    // Initialize API when TMB check is complete with timeout fallback
+    // Initialize API immediately on mount with timeout fallback
     useEffect(() => {
-        if (!is_tmb_check_complete) {
-            return; // Wait until TMB check is complete
-        }
-
         const timeoutId = setTimeout(() => {
-            if (!is_api_initialized) {
-                setIsApiInitialized(true);
-            }
-        }, 5000);
+            setIsApiInitialized(true);
+        }, 3500);
 
         const initializeApi = async () => {
             if (!api_base_initialized.current) {
@@ -116,14 +103,14 @@ const AppRoot = () => {
                     api_base_initialized.current = false;
                 } finally {
                     setIsApiInitialized(true);
-                    clearTimeout(timeoutId); // Clear timeout if API init completes
+                    clearTimeout(timeoutId);
                 }
             }
         };
 
         initializeApi();
         return () => clearTimeout(timeoutId);
-    }, [is_tmb_check_complete]);
+    }, []);
 
     if (!store || !is_api_initialized) return <AppRootLoader backgroundUrl={branding?.background_url} />;
 

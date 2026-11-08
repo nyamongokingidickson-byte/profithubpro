@@ -18,7 +18,7 @@ const CallbackPage: React.FC = () => {
                 setMessage('Login successful! Redirecting...');
                 setTimeout(() => {
                     window.location.href = '/';
-                }, 2000);
+                }, 300);
             } else {
                 setStatus('error');
                 setMessage(result.error || 'Authentication failed');

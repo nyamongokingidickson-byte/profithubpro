@@ -253,54 +253,28 @@ const CoreStoreProvider: React.FC<{ children: React.ReactNode }> = observer(({ c
     useEffect(() => {
         if (!isAuthorizing && isAuthorized && !accountInitialization.current && client) {
             accountInitialization.current = true;
-            api_base.api
-                ?.getSettings?.()
-                .then((settingRes: TSocketResponseData<'get_settings'>) => {
-                    if (!settingRes?.get_settings) return;
-                    client?.setAccountSettings(settingRes.get_settings);
-                    const client_information: TClientInformation = {
-                        loginid: activeAccount?.loginid,
-                        email: settingRes.get_settings?.email,
-                        currency: client?.currency,
-                        residence: settingRes.get_settings?.residence,
-                        first_name: settingRes.get_settings?.first_name,
-                        last_name: settingRes.get_settings?.last_name,
-                        preferred_language: settingRes.get_settings?.preferred_language,
-                        user_id: ((api_base.account_info as any)?.user_id as number) || activeLoginid,
-                        landing_company_shortcode: activeAccount?.landing_company_name,
-                    };
 
-                    Cookies.set('client_information', JSON.stringify(client_information), {
-                        domain: currentDomain,
-                    });
+            // Deriv Options V1 WebSocket does not support legacy get_settings / landing_company / get_account_status.
+            // Immediately mark landing company as loaded so post-login UI initialization never deadlocks.
+            if (!client.is_landing_company_loaded) {
+                client.setLandingCompany({} as TLandingCompany);
+            }
 
-                    if (settingRes.get_settings?.country_code) {
-                        api_base.api
-                            ?.landingCompany?.({
-                                landing_company: settingRes.get_settings.country_code,
-                            })
-                            .then((res: TSocketResponseData<'landing_company'>) => {
-                                if (res?.landing_company) {
-                                    client?.setLandingCompany(res.landing_company as unknown as TLandingCompany);
-                                }
-                            })
-                            .catch(() => undefined);
-                    }
-                })
-                .catch(() => {
-                    // get_settings is optional / unavailable on New Options WS
-                });
+            const baseClientInfo: TClientInformation = {
+                loginid: activeAccount?.loginid || activeLoginid,
+                email: '',
+                currency: client?.currency || activeAccount?.currency || 'USD',
+                residence: '',
+                first_name: '',
+                last_name: '',
+                preferred_language: '',
+                user_id: ((api_base.account_info as any)?.user_id as number) || activeLoginid,
+                landing_company_shortcode: activeAccount?.landing_company_name,
+            };
 
-            api_base.api
-                ?.getAccountStatus?.()
-                .then((res: TSocketResponseData<'get_account_status'>) => {
-                    if (res?.get_account_status) {
-                        client?.setAccountStatus(res.get_account_status);
-                    }
-                })
-                .catch(() => {
-                    // get_account_status is optional / unavailable on New Options WS
-                });
+            Cookies.set('client_information', JSON.stringify(baseClientInfo), {
+                domain: currentDomain,
+            });
         }
     }, [activeAccount, activeLoginid, client, currentDomain, isAuthorizing, isAuthorized]);
 

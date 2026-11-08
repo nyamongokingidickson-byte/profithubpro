@@ -3,7 +3,6 @@ import { observer } from 'mobx-react-lite';
 import { ToastContainer } from 'react-toastify';
 import AuthLoadingWrapper from '@/components/auth-loading-wrapper';
 import useLiveChat from '@/components/chat/useLiveChat';
-import { BOT_RESTRICTED_COUNTRIES_LIST } from '@/components/layout/header/utils';
 import ChunkLoader from '@/components/loader/chunk-loader';
 import { getUrlBase } from '@/components/shared';
 import TncStatusUpdateModal from '@/components/tnc-status-update-modal';
@@ -33,8 +32,7 @@ import '../components/bot-notification/bot-notification.scss';
 
 const AppContent = observer(() => {
     const [is_api_initialized, setIsApiInitialized] = React.useState(false);
-    const [is_loading, setIsLoading] = React.useState(true);
-    const [is_eu_error_loading, setIsEuErrorLoading] = React.useState(true);
+    const symbols_loaded = React.useRef(false);
     const store = useStore();
     const { app, transactions, common, client } = store;
     const { showDigitalOptionsMaltainvestError } = app;
@@ -74,36 +72,25 @@ const AppContent = observer(() => {
         }
     }, [common, connectionStatus]);
 
+    // Safety fallback so UI never hangs indefinitely if socket open event was emitted prior to mount
+    useEffect(() => {
+        if (api_base?.api?.connection?.readyState === 1) {
+            setIsApiInitialized(true);
+            common.setSocketOpened(true);
+            return undefined;
+        }
+        const timer = setTimeout(() => {
+            setIsApiInitialized(true);
+        }, 3500);
+        return () => clearTimeout(timer);
+    }, [common]);
+
     const { current_language } = common;
     const html = document.documentElement;
     React.useEffect(() => {
         html?.setAttribute('lang', current_language.toLowerCase());
         html?.setAttribute('dir', current_language.toLowerCase() === 'ar' ? 'rtl' : 'ltr');
     }, [current_language, html]);
-
-    // Check for EU client error early
-    const is_eu_country = client?.is_eu_country;
-    const clients_logged_out_country_code = client?.clients_country;
-    const clients_logged_in_country_code = client?.account_settings?.country_code;
-    const is_client_logged_in = client?.is_logged_in;
-
-    useEffect(() => {
-        const bot_restricted_countries = BOT_RESTRICTED_COUNTRIES_LIST();
-
-        if (!client.is_logged_in) {
-            // For logged out users
-            if (clients_logged_out_country_code) {
-                const is_restricted = !!bot_restricted_countries[clients_logged_out_country_code];
-                setIsEuErrorLoading(client.is_eu_country && is_restricted);
-            }
-        } else {
-            // For logged in users
-            if (clients_logged_in_country_code) {
-                const is_restricted = !!bot_restricted_countries[clients_logged_in_country_code];
-                setIsEuErrorLoading(is_restricted);
-            }
-        }
-    }, [is_eu_country, clients_logged_out_country_code, clients_logged_in_country_code, is_client_logged_in]);
 
     const handleMessage = React.useCallback(
         ({ data }) => {
@@ -154,48 +141,38 @@ const AppContent = observer(() => {
         });
     };
 
-    const changeActiveSymbolLoadingState = () => {
+    React.useEffect(() => {
+        if (!is_api_initialized) return undefined;
+
         init();
 
-        const retrieveActiveSymbols = () => {
-            const { active_symbols } = ApiHelpers.instance;
-            active_symbols.retrieveActiveSymbols(true).then(() => {
-                setIsLoading(false);
-            });
-        };
+        // Load active symbols in the background so UI renders immediately without blocking
+        if (!symbols_loaded.current) {
+            symbols_loaded.current = true;
+            const loadSymbols = () => {
+                ApiHelpers.instance.active_symbols
+                    .retrieveActiveSymbols(true)
+                    .catch(err => {
+                        console.warn('[AppContent] Active symbols fetch warning (non-blocking):', err);
+                    });
+            };
 
-        if (ApiHelpers?.instance?.active_symbols) {
-            retrieveActiveSymbols();
-        } else {
-            // This is a workaround to fix the issue where the active symbols are not loaded immediately
-            // when the API is initialized. Should be replaced with RxJS pubsub
-            const intervalId = setInterval(() => {
-                if (ApiHelpers?.instance?.active_symbols) {
-                    clearInterval(intervalId);
-                    retrieveActiveSymbols();
-                }
-            }, 1000);
-        }
-    };
-
-    React.useEffect(() => {
-        if (is_api_initialized) {
-            init();
-            setIsLoading(true);
-            if (!client.is_logged_in) {
-                changeActiveSymbolLoadingState();
+            if (ApiHelpers?.instance?.active_symbols) {
+                loadSymbols();
+            } else {
+                const waitForHelpers = setInterval(() => {
+                    if (ApiHelpers?.instance?.active_symbols) {
+                        clearInterval(waitForHelpers);
+                        loadSymbols();
+                    }
+                }, 100);
+                setTimeout(() => clearInterval(waitForHelpers), 10000);
             }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [is_api_initialized]);
 
-    // use is_landing_company_loaded to know got details of accounts to identify should show an error or not
-    React.useEffect(() => {
-        if (client.is_logged_in && client.is_landing_company_loaded && is_api_initialized) {
-            changeActiveSymbolLoadingState();
-        }
+        return undefined;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client.is_landing_company_loaded, is_api_initialized, client.loginid]);
+    }, [is_api_initialized, client.loginid]);
 
     useEffect(() => {
         initDatadog(true);
@@ -206,9 +183,11 @@ const AppContent = observer(() => {
 
     if (common?.error) return null;
 
-    return is_loading ? (
-        <ChunkLoader message={is_eu_error_loading ? '' : localize('Initializing Deriv Bot account...')} />
-    ) : (
+    if (!is_api_initialized && connectionStatus !== CONNECTION_STATUS.OPENED) {
+        return <ChunkLoader message={localize('Initializing Deriv Bot account...')} />;
+    }
+
+    return (
         <AuthLoadingWrapper>
             <ThemeProvider theme={is_dark_mode_on ? 'dark' : 'light'}>
                 <BlocklyLoading />

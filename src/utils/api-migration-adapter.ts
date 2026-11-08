@@ -256,28 +256,127 @@ export const transformForgetAllRequest = (
 // RESPONSE TRANSFORMATIONS (New → Legacy-compatible format, or vice versa)
 // ============================================================================
 
+const MARKET_DISPLAY_NAMES: Record<string, string> = {
+    synthetic_index: 'Derived',
+    forex: 'Forex',
+    indices: 'Stock Indices',
+    commodities: 'Commodities',
+    cryptocurrency: 'Cryptocurrencies',
+    basket_index: 'Baskets',
+};
+
+const SUBMARKET_DISPLAY_NAMES: Record<string, string> = {
+    random_index: 'Continuous Indices',
+    random_daily: 'Daily Reset Indices',
+    crash_index: 'Crash/Boom Indices',
+    crash_boom: 'Crash/Boom Indices',
+    jump_index: 'Jump Indices',
+    step_index: 'Step Indices',
+    range_break: 'Range Break Indices',
+    major_pairs: 'Major Pairs',
+    minor_pairs: 'Minor Pairs',
+    smart_fx: 'Smart FX',
+    americas: 'Americas',
+    asia_oceania: 'Asia/Oceania',
+    europe_africa: 'Europe',
+    metals: 'Metals',
+    energy: 'Energy',
+    non_stable_coin: 'Cryptocurrencies',
+};
+
+const SYMBOL_DISPLAY_NAMES: Record<string, string> = {
+    R_10: 'Volatility 10 Index',
+    R_25: 'Volatility 25 Index',
+    R_50: 'Volatility 50 Index',
+    R_75: 'Volatility 75 Index',
+    R_100: 'Volatility 100 Index',
+    '1HZ10V': 'Volatility 10 (1s) Index',
+    '1HZ15V': 'Volatility 15 (1s) Index',
+    '1HZ25V': 'Volatility 25 (1s) Index',
+    '1HZ30V': 'Volatility 30 (1s) Index',
+    '1HZ50V': 'Volatility 50 (1s) Index',
+    '1HZ75V': 'Volatility 75 (1s) Index',
+    '1HZ90V': 'Volatility 90 (1s) Index',
+    '1HZ100V': 'Volatility 100 (1s) Index',
+    '1HZ150V': 'Volatility 150 (1s) Index',
+    '1HZ200V': 'Volatility 200 (1s) Index',
+    '1HZ250V': 'Volatility 250 (1s) Index',
+    '1HZ300V': 'Volatility 300 (1s) Index',
+    JD10: 'Jump 10 Index',
+    JD25: 'Jump 25 Index',
+    JD50: 'Jump 50 Index',
+    JD75: 'Jump 75 Index',
+    JD100: 'Jump 100 Index',
+    BOOM300N: 'Boom 300 Index',
+    BOOM500: 'Boom 500 Index',
+    BOOM600: 'Boom 600 Index',
+    BOOM900: 'Boom 900 Index',
+    BOOM1000: 'Boom 1000 Index',
+    CRASH300N: 'Crash 300 Index',
+    CRASH500: 'Crash 500 Index',
+    CRASH600: 'Crash 600 Index',
+    CRASH900: 'Crash 900 Index',
+    CRASH1000: 'Crash 1000 Index',
+    stpRNG: 'Step Index',
+    stpRNG2: 'Step Index 200',
+    stpRNG3: 'Step Index 300',
+    stpRNG4: 'Step Index 400',
+    stpRNG5: 'Step Index 500',
+    RDBEAR: 'Bear Market Index',
+    RDBULL: 'Bull Market Index',
+};
+
+const humanizeCode = (code?: string): string => {
+    if (!code) return '';
+    return code
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+};
+
 /**
  * Transform new active_symbols response to include legacy field names
- * symbol ← underlying_symbol
- * symbol_type ← underlying_symbol_type
- * display_name ← underlying_symbol_name
- * pip ← pip_size
+ * Preserves existing fields when public v3 WS format is already used.
  */
 export const transformActiveSymbolsResponse = (
     newResponse: any
 ): any => {
-    if (!newResponse.active_symbols) return newResponse;
-    
+    if (!Array.isArray(newResponse?.active_symbols)) return newResponse;
+
     return {
         ...newResponse,
-        active_symbols: newResponse.active_symbols.map((symbol: any) => ({
-            ...symbol,
-            // Add legacy field names for backwards compatibility
-            symbol: symbol.underlying_symbol,
-            symbol_type: symbol.underlying_symbol_type,
-            display_name: symbol.underlying_symbol_name,
-            pip: symbol.pip_size,
-        })),
+        active_symbols: newResponse.active_symbols.map((item: any) => {
+            const resolvedSymbol = item.underlying_symbol ?? item.symbol ?? '';
+            const resolvedMarket = item.market ?? 'synthetic_index';
+            const resolvedSubmarket = item.submarket ?? 'random_index';
+            const resolvedPip = item.pip_size ?? item.pip ?? 0.01;
+            const resolvedDisplayName =
+                item.display_name ??
+                item.underlying_symbol_name ??
+                SYMBOL_DISPLAY_NAMES[resolvedSymbol] ??
+                resolvedSymbol;
+
+            return {
+                ...item,
+                symbol: resolvedSymbol,
+                underlying_symbol: resolvedSymbol,
+                symbol_type: item.underlying_symbol_type ?? item.symbol_type ?? resolvedMarket,
+                display_name: resolvedDisplayName,
+                market: resolvedMarket,
+                market_display_name:
+                    item.market_display_name ??
+                    MARKET_DISPLAY_NAMES[resolvedMarket] ??
+                    humanizeCode(resolvedMarket),
+                submarket: resolvedSubmarket,
+                submarket_display_name:
+                    item.submarket_display_name ??
+                    SUBMARKET_DISPLAY_NAMES[resolvedSubmarket] ??
+                    humanizeCode(resolvedSubmarket),
+                pip: resolvedPip,
+                pip_size: resolvedPip,
+                exchange_is_open: item.exchange_is_open ?? 1,
+                is_trading_suspended: item.is_trading_suspended ?? 0,
+            };
+        }),
     };
 };
 
